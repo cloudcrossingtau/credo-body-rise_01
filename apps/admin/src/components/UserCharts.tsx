@@ -1,7 +1,5 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import {
-  type Item,
-  type Minutes,
   ymd,
   addDays,
   startOfDay,
@@ -9,7 +7,6 @@ import {
   niceScale,
   WD,
   TIME_COLOR,
-  COUNT_COLOR,
 } from "@/lib/training";
 
 const CHART_H = 200; // 描画領域の高さ(px)
@@ -17,21 +14,16 @@ const AXIS_W = 40; // y軸ラベル幅(px)
 const DAY_W = 44; // 日別バー幅(px)
 const WEEK_W = 64; // 週別バー幅(px)
 
-// グラフ描画部品（データ取得はしない）。items/minutes/weekStart を渡すと
-// 時間（分）・種目数（回）の日別/週別グラフを描く。
+// グラフ描画部品（データ取得はしない）。日別・週別の合計トレーニング時間（分）を描く。
 export function UserCharts({
-  items,
-  minutes,
+  dayMinutes,
   weekStart,
 }: {
-  items: Item[];
-  minutes: Minutes;
+  dayMinutes: Record<string, number>; // date -> 分
   weekStart: number;
 }) {
   const timeDailyRef = useRef<HTMLDivElement>(null);
   const timeWeeklyRef = useRef<HTMLDivElement>(null);
-  const countDailyRef = useRef<HTMLDivElement>(null);
-  const countWeeklyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const toEnd = (r: RefObject<HTMLDivElement>) => {
@@ -39,12 +31,10 @@ export function UserCharts({
     };
     toEnd(timeDailyRef);
     toEnd(timeWeeklyRef);
-    toEnd(countDailyRef);
-    toEnd(countWeeklyRef);
-  }, [items, minutes]);
+  }, [dayMinutes]);
 
   const today = startOfDay(new Date());
-  const recYmds = Object.keys(minutes).map((k) => k.slice(k.indexOf(":") + 1));
+  const recYmds = Object.keys(dayMinutes);
   const firstYmd = recYmds.length
     ? recYmds.reduce((a, b) => (a < b ? a : b))
     : ymd(today);
@@ -65,14 +55,10 @@ export function UserCharts({
     addDays(wFirst, i * 7),
   );
 
-  const timeItems = items.filter((it) => it.unit === "time");
-  const countItems = items.filter((it) => it.unit === "count");
-
-  const sumDay = (group: Item[], d: Date) =>
-    group.reduce((s, it) => s + (minutes[`${it.id}:${ymd(d)}`] ?? 0), 0);
-  const sumWeek = (group: Item[], ws: Date) => {
+  const sumDay = (d: Date) => dayMinutes[ymd(d)] ?? 0;
+  const sumWeek = (ws: Date) => {
     let s = 0;
-    for (let k = 0; k < 7; k++) s += sumDay(group, addDays(ws, k));
+    for (let k = 0; k < 7; k++) s += sumDay(addDays(ws, k));
     return s;
   };
 
@@ -82,9 +68,7 @@ export function UserCharts({
     return (
       <div className="text-center">
         <div
-          className={`text-[12px] ${
-            wd === 0 ? "text-red-500" : wd === 6 ? "text-blue-500" : "text-muted"
-          }`}
+          className={`text-[12px] ${wd === 0 ? "text-red-500" : wd === 6 ? "text-blue-500" : "text-muted"}`}
         >
           {isFirst ? `${d.getMonth() + 1}/1` : d.getDate()}
         </div>
@@ -102,13 +86,10 @@ export function UserCharts({
     );
   };
 
-  const fmtMin = (v: number) => `${Math.round(v)}`;
-  const fmtC = (v: number) => `${v}`;
+  const fmt = (v: number) => `${Math.round(v)}`;
 
   const renderBarChart = (
     cols: { value: number; x: ReactNode }[],
-    color: string,
-    fmt: (v: number) => string,
     barW: number,
     scrollRef: RefObject<HTMLDivElement>,
   ) => {
@@ -154,7 +135,7 @@ export function UserCharts({
                       className="w-full max-w-[2.2rem] rounded-t-md"
                       style={{
                         height: `${(col.value / scale.max) * 100}%`,
-                        backgroundColor: color,
+                        backgroundColor: TIME_COLOR,
                       }}
                     />
                   </div>
@@ -174,79 +155,28 @@ export function UserCharts({
     );
   };
 
-  if (items.length === 0) {
-    return (
-      <p className="rounded-2xl border border-card-border bg-card-bg px-4 py-5 text-center text-[14px] text-muted">
-        登録項目はありません。
-      </p>
-    );
-  }
-
   return (
     <>
-      {timeItems.length > 0 && (
-        <>
-          <section className="mt-2">
-            <h3 className="text-[15px] font-semibold text-slate-900">
-              時間（分）・日別
-            </h3>
-            {renderBarChart(
-              dayList.map((d) => ({ value: sumDay(timeItems, d), x: dailyX(d) })),
-              TIME_COLOR,
-              fmtMin,
-              DAY_W,
-              timeDailyRef,
-            )}
-          </section>
-          <section className="mt-5">
-            <h3 className="text-[15px] font-semibold text-slate-900">
-              時間（分）・週別
-            </h3>
-            {renderBarChart(
-              weekList.map((ws) => ({
-                value: sumWeek(timeItems, ws),
-                x: weeklyX(ws),
-              })),
-              TIME_COLOR,
-              fmtMin,
-              WEEK_W,
-              timeWeeklyRef,
-            )}
-          </section>
-        </>
-      )}
-
-      {countItems.length > 0 && (
-        <>
-          <section className="mt-6">
-            <h3 className="text-[15px] font-semibold text-slate-900">
-              種目数（回）・日別
-            </h3>
-            {renderBarChart(
-              dayList.map((d) => ({ value: sumDay(countItems, d), x: dailyX(d) })),
-              COUNT_COLOR,
-              fmtC,
-              DAY_W,
-              countDailyRef,
-            )}
-          </section>
-          <section className="mt-5">
-            <h3 className="text-[15px] font-semibold text-slate-900">
-              種目数（回）・週別
-            </h3>
-            {renderBarChart(
-              weekList.map((ws) => ({
-                value: sumWeek(countItems, ws),
-                x: weeklyX(ws),
-              })),
-              COUNT_COLOR,
-              fmtC,
-              WEEK_W,
-              countWeeklyRef,
-            )}
-          </section>
-        </>
-      )}
+      <section className="mt-2">
+        <h3 className="text-[15px] font-semibold text-slate-900">
+          トレーニング時間（分）・日別
+        </h3>
+        {renderBarChart(
+          dayList.map((d) => ({ value: sumDay(d), x: dailyX(d) })),
+          DAY_W,
+          timeDailyRef,
+        )}
+      </section>
+      <section className="mt-5">
+        <h3 className="text-[15px] font-semibold text-slate-900">
+          トレーニング時間（分）・週別
+        </h3>
+        {renderBarChart(
+          weekList.map((ws) => ({ value: sumWeek(ws), x: weeklyX(ws) })),
+          WEEK_W,
+          timeWeeklyRef,
+        )}
+      </section>
     </>
   );
 }

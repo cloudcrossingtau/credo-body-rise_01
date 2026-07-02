@@ -8,26 +8,33 @@ import {
   startOfWeek,
   WD,
   GRID_PAST_DAYS,
+  TIME_COLOR,
 } from "@/lib/training";
 
 const NAME_W = 140; // 種目名カラム幅(px)
 const CELL_W = 48; // 1日セル幅(px)
 
 // 記録グリッドの表示部品（データ取得はしない）。
-// readOnly=false のときはセルがボタンになり onCell(itemId, date) を呼ぶ。
+//   - 先頭行「トレーニング時間」= その日の合計時間(分)。onEditDay(date) で編集。
+//   - 各項目行 = 実施/未実施のチェック。onToggle(itemId, date) でトグル。
+// readOnly=true では静的表示。
 export function TrainingGrid({
   items,
   minutes,
+  dayMinutes,
   weekStart,
   readOnly = false,
-  onCell,
+  onToggle,
+  onEditDay,
   maxHeight = "calc(100dvh - 220px)",
 }: {
   items: Item[];
-  minutes: Minutes;
+  minutes: Minutes; // itemId:date -> 1（実施マーク）
+  dayMinutes: Record<string, number>; // date -> 分
   weekStart: number;
   readOnly?: boolean;
-  onCell?: (itemId: string, date: Date) => void;
+  onToggle?: (itemId: string, date: Date) => void;
+  onEditDay?: (date: Date) => void;
   maxHeight?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -35,9 +42,12 @@ export function TrainingGrid({
   const today = startOfDay(new Date());
   const todayStr = ymd(today);
 
-  // 表示範囲：約 GRID_PAST_DAYS 日前〜今日（mobile と同じ。過去入力できるよう広く取る）。
-  // 記録がそれより古ければ最古の記録日まで遡る。
-  const recYmds = Object.keys(minutes).map((k) => k.slice(k.indexOf(":") + 1));
+  // 表示範囲：約 GRID_PAST_DAYS 日前〜今日。記録（実施マーク or 日別時間）が
+  // それより古ければ最古の記録日まで遡る。
+  const recYmds = [
+    ...Object.keys(minutes).map((k) => k.slice(k.indexOf(":") + 1)),
+    ...Object.keys(dayMinutes),
+  ];
   const firstYmd = recYmds.length
     ? recYmds.reduce((a, b) => (a < b ? a : b))
     : todayStr;
@@ -49,8 +59,6 @@ export function TrainingGrid({
     Math.round((today.getTime() - gStart.getTime()) / 86400000) + 1;
   const gridDays = Array.from({ length: gCount }, (_, i) => addDays(gStart, i));
 
-  // 連続する同月の列をまとめた「月バンド」用セグメント（カレンダー風の月見出し）。
-  // どの月でも年が分かるよう「YYYY年M月」を表示する。
   const monthSegments: { key: string; label: string; count: number }[] = [];
   for (const d of gridDays) {
     const y = d.getFullYear();
@@ -66,23 +74,26 @@ export function TrainingGrid({
       scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
   }, []);
 
-  // 今週（週開始曜日基準）の合計（生値）。週別グラフの直近の週と一致する。
-  function weekTotal(itemId: string) {
-    const ws = startOfWeek(today, weekStart);
+  const ws = startOfWeek(today, weekStart);
+  // 今週の合計時間（分）
+  function weekMinutes() {
     let m = 0;
-    for (let k = 0; k < 7; k++) {
-      m += minutes[`${itemId}:${ymd(addDays(ws, k))}`] ?? 0;
-    }
+    for (let k = 0; k < 7; k++) m += dayMinutes[ymd(addDays(ws, k))] ?? 0;
     return m;
   }
-
-  if (items.length === 0) {
-    return (
-      <p className="rounded-2xl border border-card-border bg-card-bg px-4 py-5 text-center text-[14px] text-muted">
-        登録項目はありません。
-      </p>
-    );
+  // 今週の実施日数（項目ごと）
+  function weekDoneCount(itemId: string) {
+    let c = 0;
+    for (let k = 0; k < 7; k++) {
+      if ((minutes[`${itemId}:${ymd(addDays(ws, k))}`] ?? 0) > 0) c++;
+    }
+    return c;
   }
+
+  const cellCls = (d: Date) =>
+    `flex h-12 shrink-0 items-center justify-center ${
+      d.getDay() === weekStart ? "border-l border-slate-300" : ""
+    }`;
 
   return (
     <div
@@ -91,14 +102,10 @@ export function TrainingGrid({
       style={{ maxHeight }}
     >
       <div style={{ minWidth: NAME_W + gridDays.length * CELL_W }}>
-        {/* 日付ヘッダー（縦スクロールで上端固定）。月バンド＋曜日/日の2段。 */}
+        {/* 日付ヘッダー */}
         <div className="sticky top-0 z-30 bg-card-bg">
-          {/* 月バンド（横スクロールしても見えている月のラベルは左に残る） */}
           <div className="flex items-stretch">
-            <div
-              className="sticky left-0 z-40 bg-card-bg"
-              style={{ width: NAME_W }}
-            />
+            <div className="sticky left-0 z-40 bg-card-bg" style={{ width: NAME_W }} />
             {monthSegments.map((seg) => (
               <div
                 key={seg.key}
@@ -114,13 +121,12 @@ export function TrainingGrid({
               </div>
             ))}
           </div>
-          {/* 曜日 + 日 */}
           <div className="flex items-stretch border-b border-card-border">
             <div
               className="sticky left-0 z-40 flex items-center border-r border-card-border bg-card-bg px-3 py-2 text-[15px] font-semibold text-slate-700"
               style={{ width: NAME_W }}
             >
-              種目
+              項目
             </div>
             {gridDays.map((d, i) => {
               const isToday = ymd(d) === todayStr;
@@ -129,26 +135,16 @@ export function TrainingGrid({
               return (
                 <div
                   key={i}
-                  className={`shrink-0 py-2 text-center ${
-                    isWeekStart ? "border-l border-slate-300" : ""
-                  }`}
+                  className={`shrink-0 py-2 text-center ${isWeekStart ? "border-l border-slate-300" : ""}`}
                   style={{ width: CELL_W }}
                 >
                   <div
-                    className={`text-[13px] ${
-                      wd === 0
-                        ? "text-red-500"
-                        : wd === 6
-                          ? "text-blue-500"
-                          : "text-muted"
-                    }`}
+                    className={`text-[13px] ${wd === 0 ? "text-red-500" : wd === 6 ? "text-blue-500" : "text-muted"}`}
                   >
                     {WD[wd]}
                   </div>
                   <div
-                    className={`mx-auto mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[14px] font-semibold ${
-                      isToday ? "bg-accent text-white" : "text-slate-800"
-                    }`}
+                    className={`mx-auto mt-0.5 flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[14px] font-semibold ${isToday ? "bg-accent text-white" : "text-slate-800"}`}
                   >
                     {d.getDate()}
                   </div>
@@ -158,7 +154,53 @@ export function TrainingGrid({
           </div>
         </div>
 
-        {/* 種目行 */}
+        {/* トレーニング時間（分）の行 */}
+        <div className="flex items-stretch border-b-2 border-slate-200">
+          <div
+            className="sticky left-0 z-10 flex items-center gap-2 border-r border-card-border bg-card-bg px-3 py-2"
+            style={{ width: NAME_W }}
+          >
+            <span
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: TIME_COLOR }}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-medium text-slate-900">
+                トレーニング時間
+              </span>
+              <span className="block text-[12px] text-muted">
+                今週 {weekMinutes()}分
+              </span>
+            </span>
+          </div>
+          {gridDays.map((d, i) => {
+            const v = dayMinutes[ymd(d)] ?? 0;
+            const inner = (
+              <span
+                className="flex h-8 min-w-8 items-center justify-center rounded-lg px-1 text-[13px] font-semibold"
+                style={v > 0 ? { backgroundColor: TIME_COLOR, color: "#fff" } : { color: "#cbd5e1" }}
+              >
+                {v > 0 ? v : "·"}
+              </span>
+            );
+            return readOnly ? (
+              <div key={i} className={cellCls(d)} style={{ width: CELL_W }}>
+                {inner}
+              </div>
+            ) : (
+              <button
+                key={i}
+                onClick={() => onEditDay?.(d)}
+                className={`${cellCls(d)} hover:bg-slate-50`}
+                style={{ width: CELL_W }}
+              >
+                {inner}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 項目行（実施チェック） */}
         {items.map((it) => (
           <div
             key={it.id}
@@ -177,41 +219,32 @@ export function TrainingGrid({
                   {it.name}
                 </span>
                 <span className="block text-[12px] text-muted">
-                  今週 {weekTotal(it.id)}
-                  {it.unit === "time" ? "分" : "回"}
+                  今週 {weekDoneCount(it.id)}日
                 </span>
               </span>
             </div>
             {gridDays.map((d, i) => {
-              const val = minutes[`${it.id}:${ymd(d)}`] ?? 0;
-              const isWeekStart = d.getDay() === weekStart;
-              const cellInner = (
+              const done = (minutes[`${it.id}:${ymd(d)}`] ?? 0) > 0;
+              const inner = (
                 <span
-                  className="flex h-8 min-w-8 items-center justify-center rounded-lg px-1 text-[13px] font-semibold"
-                  style={
-                    val > 0
-                      ? { backgroundColor: it.color, color: "#fff" }
-                      : { color: "#cbd5e1" }
-                  }
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[15px] font-bold"
+                  style={done ? { backgroundColor: it.color, color: "#fff" } : { color: "#cbd5e1" }}
                 >
-                  {val > 0 ? val : "·"}
+                  {done ? "✓" : "·"}
                 </span>
               );
-              const cls = `flex h-12 shrink-0 items-center justify-center ${
-                isWeekStart ? "border-l border-slate-300" : ""
-              }`;
               return readOnly ? (
-                <div key={i} className={cls} style={{ width: CELL_W }}>
-                  {cellInner}
+                <div key={i} className={cellCls(d)} style={{ width: CELL_W }}>
+                  {inner}
                 </div>
               ) : (
                 <button
                   key={i}
-                  onClick={() => onCell?.(it.id, d)}
-                  className={`${cls} hover:bg-slate-50`}
+                  onClick={() => onToggle?.(it.id, d)}
+                  className={`${cellCls(d)} hover:bg-slate-50`}
                   style={{ width: CELL_W }}
                 >
-                  {cellInner}
+                  {inner}
                 </button>
               );
             })}

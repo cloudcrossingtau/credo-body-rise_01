@@ -14,7 +14,8 @@ export type UserGrid = {
   role: string;
   weekStart: number;
   items: Item[];
-  minutes: Minutes; // itemId:date -> value（このユーザー分）
+  minutes: Minutes; // itemId:date -> 1（実施マーク・このユーザー分）
+  dayMinutes: Record<string, number>; // date -> 合計時間(分)
   recordCount: number;
 };
 
@@ -25,6 +26,7 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
     { data: profs, error: ep },
     { data: items, error: ei },
     { data: recs, error: er },
+    { data: dms, error: ed },
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -34,10 +36,12 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
       .select("id,user_id,name,color,unit,sort_order")
       .order("sort_order", { ascending: true }),
     supabase.from("training_records").select("user_id,item_id,date,value"),
+    supabase.from("daily_minutes").select("user_id,date,minutes"),
   ]);
   if (ep) throw ep;
   if (ei) throw ei;
   if (er) throw er;
+  if (ed) throw ed;
 
   const itemsByUser = new Map<string, Item[]>();
   for (const it of items ?? []) {
@@ -55,6 +59,13 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
     recCountByUser.set(r.user_id, (recCountByUser.get(r.user_id) ?? 0) + 1);
   }
 
+  const dayMinutesByUser = new Map<string, Record<string, number>>();
+  for (const r of dms ?? []) {
+    const m = dayMinutesByUser.get(r.user_id) ?? {};
+    m[r.date] = r.minutes;
+    dayMinutesByUser.set(r.user_id, m);
+  }
+
   const users: UserGrid[] = (profs ?? []).map((p) => ({
     id: p.id,
     email: p.email,
@@ -64,6 +75,7 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
     weekStart: p.week_start ?? 1,
     items: itemsByUser.get(p.id) ?? [],
     minutes: minutesByUser.get(p.id) ?? {},
+    dayMinutes: dayMinutesByUser.get(p.id) ?? {},
     recordCount: recCountByUser.get(p.id) ?? 0,
   }));
 

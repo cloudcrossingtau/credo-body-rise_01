@@ -7,7 +7,6 @@ import { UserCharts } from "@/components/UserCharts";
 import { Avatar } from "@/components/Avatar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { withRetry, autoReloadOnce } from "@/lib/recover";
-import { type Item, type Minutes } from "@/lib/training";
 
 // グラフ。ロールで見える範囲が変わる:
 //   - 一般ユーザー: 自分のグラフ。
@@ -17,9 +16,8 @@ export function Charts() {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // 本人用
-  const [items, setItems] = useState<Item[]>([]);
-  const [minutes, setMinutes] = useState<Minutes>({});
+  // 本人用（グラフは日別合計時間のみ使用）
+  const [dayMinutes, setDayMinutes] = useState<Record<string, number>>({});
   const [weekStart, setWeekStart] = useState<number>(1);
 
   // 管理者/開発者用
@@ -57,8 +55,7 @@ export function Charts() {
           label: "pullRemote",
         });
         if (remote) {
-          setItems(remote.items);
-          setMinutes(remote.minutes);
+          setDayMinutes(remote.dayMinutes);
           if (remote.weekStart != null) setWeekStart(remote.weekStart);
         }
       }
@@ -127,11 +124,7 @@ export function Charts() {
                     </p>
                   </div>
                 </div>
-                <UserCharts
-                  items={u.items}
-                  minutes={u.minutes}
-                  weekStart={u.weekStart}
-                />
+                <UserCharts dayMinutes={u.dayMinutes} weekStart={u.weekStart} />
               </section>
             );
           })}
@@ -152,7 +145,7 @@ export function Charts() {
         <h2 className="text-[20px] font-semibold text-foreground">グラフ</h2>
         <RefreshButton onClick={loadData} />
       </div>
-      <UserCharts items={items} minutes={minutes} weekStart={weekStart} />
+      <UserCharts dayMinutes={dayMinutes} weekStart={weekStart} />
     </div>
   );
 }
