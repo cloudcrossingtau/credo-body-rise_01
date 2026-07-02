@@ -615,9 +615,14 @@ export default function TrainingLog() {
           return (
             <button
               key={t.id}
-              onClick={() => setView(t.id)}
+              onClick={gridEditing ? undefined : () => setView(t.id)}
+              disabled={gridEditing}
               className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 ${
-                active ? "text-accent" : "text-slate-500 dark:text-slate-400"
+                gridEditing
+                  ? "cursor-not-allowed text-slate-300 dark:text-slate-600"
+                  : active
+                    ? "text-accent"
+                    : "text-slate-500 dark:text-slate-400"
               }`}
               aria-current={active ? "page" : undefined}
             >
@@ -1347,11 +1352,16 @@ export default function TrainingLog() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {supabase && session && <AnnouncementBellButton />}
+              {supabase && session && (
+                <span className={gridEditing ? "pointer-events-none opacity-40" : ""}>
+                  <AnnouncementBellButton />
+                </span>
+              )}
               {supabase && session && (
               <button
-                onClick={() => setView("profile")}
-                className="h-9 w-9 overflow-hidden rounded-full bg-slate-200 ring-1 ring-card-border dark:bg-slate-700"
+                onClick={gridEditing ? undefined : () => setView("profile")}
+                disabled={gridEditing}
+                className="h-9 w-9 overflow-hidden rounded-full bg-slate-200 ring-1 ring-card-border disabled:opacity-40 dark:bg-slate-700"
                 aria-label="プロフィール"
               >
                 {myAvatarUrl ? (
@@ -1402,10 +1412,10 @@ export default function TrainingLog() {
               {supabase && session && (
                 <button
                   onClick={refreshData}
-                  disabled={refreshing}
+                  disabled={refreshing || gridEditing}
                   aria-label="更新"
                   title="更新"
-                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-card-bg text-slate-600 disabled:opacity-50 dark:border-slate-600 dark:text-slate-300"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-card-bg text-slate-600 disabled:opacity-40 dark:border-slate-600 dark:text-slate-300"
                 >
                   <svg
                     viewBox="0 0 24 24"

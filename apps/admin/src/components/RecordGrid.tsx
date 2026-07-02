@@ -246,7 +246,7 @@ export function RecordGrid() {
               {gridEditing ? "完了" : "編集"}
             </button>
           )}
-          <RefreshButton onClick={loadData} />
+          <RefreshButton onClick={loadData} disabled={gridEditing} />
         </div>
       </div>
 
