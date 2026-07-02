@@ -838,35 +838,6 @@ export default function TrainingLog() {
                     </button>
                   </div>
 
-                  {/* 単位 */}
-                  <div className="mt-2 flex items-center gap-2 pl-1">
-                    <span className="text-[13px] text-muted">
-                      記録の単位
-                    </span>
-                    <div className="flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
-                      <button
-                        onClick={() => updateItem(it.id, { unit: "time" })}
-                        className={`px-3 py-1 text-[14px] font-medium ${
-                          it.unit === "time"
-                            ? "bg-accent text-white"
-                            : "bg-card-bg text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                        }`}
-                      >
-                        時間
-                      </button>
-                      <button
-                        onClick={() => updateItem(it.id, { unit: "count" })}
-                        className={`px-3 py-1 text-[14px] font-medium ${
-                          it.unit === "count"
-                            ? "bg-accent text-white"
-                            : "bg-card-bg text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                        }`}
-                      >
-                        種目数
-                      </button>
-                    </div>
-                  </div>
-
                   {/* インライン色ピッカー */}
                   {colorPickerFor === it.id && (
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -908,31 +879,6 @@ export default function TrainingLog() {
                 placeholder="項目名（例：水泳）"
                 className="mt-2 w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[16px] text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
-              <p className="mt-3 text-[15px] font-medium text-slate-800 dark:text-slate-200">
-                記録の単位
-              </p>
-              <div className="mt-1.5 flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
-                <button
-                  onClick={() => setNewUnit("time")}
-                  className={`flex-1 px-3 py-2 text-[15px] font-medium ${
-                    newUnit === "time"
-                      ? "bg-accent text-white"
-                      : "bg-card-bg text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                  }`}
-                >
-                  時間
-                </button>
-                <button
-                  onClick={() => setNewUnit("count")}
-                  className={`flex-1 px-3 py-2 text-[15px] font-medium ${
-                    newUnit === "count"
-                      ? "bg-accent text-white"
-                      : "bg-card-bg text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                  }`}
-                >
-                  種目数
-                </button>
-              </div>
               <p className="mt-3 text-[15px] font-medium text-slate-800 dark:text-slate-200">
                 色
               </p>

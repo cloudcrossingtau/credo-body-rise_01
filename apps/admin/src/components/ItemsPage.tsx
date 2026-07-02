@@ -150,9 +150,6 @@ export function ItemsPage() {
             <span className="flex-1 text-[15px] font-semibold text-foreground">
               {it.name}
             </span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[13px] font-medium text-slate-700">
-              {it.unit === "time" ? "時間（分）" : "種目数（回）"}
-            </span>
             {/* 並べ替え（カードのクリックとは独立） */}
             <span className="flex flex-col">
               <span
@@ -244,29 +241,6 @@ export function ItemsPage() {
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[16px] text-slate-900 placeholder:text-slate-400"
             />
 
-            <p className="mt-3 text-[14px] font-medium text-slate-800">記録の単位</p>
-            <div className="mt-1.5 flex overflow-hidden rounded-lg border border-slate-300">
-              <button
-                onClick={() => setDraft({ ...draft, unit: "time" })}
-                className={`flex-1 px-3 py-2 text-[15px] font-medium ${
-                  draft.unit === "time"
-                    ? "bg-accent text-white"
-                    : "bg-card-bg text-slate-800"
-                }`}
-              >
-                時間（分）
-              </button>
-              <button
-                onClick={() => setDraft({ ...draft, unit: "count" })}
-                className={`flex-1 px-3 py-2 text-[15px] font-medium ${
-                  draft.unit === "count"
-                    ? "bg-accent text-white"
-                    : "bg-card-bg text-slate-800"
-                }`}
-              >
-                種目数（回）
-              </button>
-            </div>
 
             <p className="mt-3 text-[14px] font-medium text-slate-800">色</p>
             <div className="mt-1.5 flex flex-wrap gap-2">
