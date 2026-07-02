@@ -81,7 +81,7 @@ const WEEK_W = 64; // 週別バー1本ぶんの幅(px)
 const GRID_PAST_DAYS = 180; // 記録グリッドで遡れる日数（最大スクロール範囲）
 // 引っ張って更新: 表の横スクロールと干渉するため現在は無効。再取得はログイン時に行う。
 const ENABLE_PULL_TO_REFRESH = false;
-const NAME_W = 88; // 種目名カラム幅(px)
+const NAME_W = 104; // 種目名カラム幅(px)
 const CELL_W = 44; // 記録グリッドの1日セル幅(px)
 
 export default function TrainingLog() {
@@ -1456,10 +1456,10 @@ export default function TrainingLog() {
             {/* 種目名は左固定・日付部分は横スクロール。日付ヘッダ行は縦スクロールで上端固定。 */}
             <div
               ref={gridScrollRef}
-              className={`mt-3 overflow-auto overscroll-none rounded-2xl bg-card-bg dark:bg-slate-900 ${
+              className={`mt-3 overflow-auto overscroll-none rounded-2xl border bg-card-bg dark:bg-slate-900 ${
                 gridEditing
-                  ? "border-2 border-accent ring-2 ring-accent/20"
-                  : "border border-card-border dark:border-slate-800"
+                  ? "border-accent ring-2 ring-accent/30"
+                  : "border-card-border dark:border-slate-800"
               }`}
               style={{
                 maxHeight:
@@ -1558,7 +1558,7 @@ export default function TrainingLog() {
                       <path d="M12 7v5l3 2" />
                     </svg>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-bold text-blue-900 dark:text-blue-200">
+                      <span className="block text-[15px] font-bold leading-tight text-blue-900 dark:text-blue-200">
                         トレーニング時間
                       </span>
                       <span className="block text-[12px] text-muted">
@@ -1618,7 +1618,7 @@ export default function TrainingLog() {
                           style={{ backgroundColor: it.color }}
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[14px] font-medium text-slate-700 dark:text-slate-300">
+                          <span className="block text-[14px] font-medium leading-tight line-clamp-2 wrap-break-word text-slate-700 dark:text-slate-300">
                             {it.name}
                           </span>
                           <span className="block text-[12px] text-muted">

@@ -98,10 +98,10 @@ export function TrainingGrid({
   return (
     <div
       ref={scrollRef}
-      className={`overflow-auto overscroll-none rounded-2xl bg-card-bg ${
+      className={`overflow-auto overscroll-none rounded-2xl border bg-card-bg ${
         readOnly
-          ? "border border-card-border"
-          : "border-2 border-accent ring-2 ring-accent/20"
+          ? "border-card-border"
+          : "border-accent ring-2 ring-accent/30"
       }`}
       style={{ maxHeight }}
     >
@@ -178,7 +178,7 @@ export function TrainingGrid({
               <path d="M12 7v5l3 2" />
             </svg>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-bold text-blue-900">
+              <span className="block text-[15px] font-bold leading-tight text-blue-900">
                 トレーニング時間
               </span>
               <span className="block text-[12px] text-muted">
@@ -234,7 +234,7 @@ export function TrainingGrid({
                 style={{ backgroundColor: it.color }}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-medium text-slate-700">
+                <span className="block text-[14px] font-medium leading-tight line-clamp-2 wrap-break-word text-slate-700">
                   {it.name}
                 </span>
                 <span className="block text-[12px] text-muted">
