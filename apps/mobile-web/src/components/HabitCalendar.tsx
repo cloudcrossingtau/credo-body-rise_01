@@ -12,6 +12,7 @@ import {
   pullRemote,
   saveRecord,
   deleteRecord,
+  saveDayMinutes,
   saveItems,
   saveWeekStart,
   uuid,
@@ -85,7 +86,8 @@ const CELL_W = 44; // 記録グリッドの1日セル幅(px)
 
 export default function TrainingLog() {
   const [items, setItems] = useState<Item[]>([]);
-  const [minutes, setMinutes] = useState<Minutes>({});
+  const [minutes, setMinutes] = useState<Minutes>({}); // 項目の実施マーク（1=実施）
+  const [dayMinutes, setDayMinutes] = useState<Record<string, number>>({}); // 日別合計時間(分)
   const [weekStart, setWeekStart] = useState<number>(1); // 0=日..6=土（既定=月）
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<
@@ -116,10 +118,8 @@ export default function TrainingLog() {
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
   const [inviteBusy, setInviteBusy] = useState(false);
 
-  // セル編集モーダル
-  const [editing, setEditing] = useState<{ itemId: string; date: Date } | null>(
-    null,
-  );
+  // 日別トレーニング時間の編集モーダル（対象日）
+  const [editing, setEditing] = useState<Date | null>(null);
   const [editVal, setEditVal] = useState("");
 
   // 設定: 項目ごとのインライン色ピッカー
@@ -187,6 +187,7 @@ export default function TrainingLog() {
       if (event === "SIGNED_OUT") {
         setItems([]);
         setMinutes({});
+        setDayMinutes({});
         setLoaded(false);
         setLoadError(null);
       }
@@ -227,6 +228,7 @@ export default function TrainingLog() {
       if (remote) {
         setItems(remote.items);
         setMinutes(remote.minutes);
+        setDayMinutes(remote.dayMinutes);
         if (remote.weekStart != null) setWeekStart(remote.weekStart);
       }
       setLoaded(true);
@@ -267,6 +269,7 @@ export default function TrainingLog() {
       if (remote) {
         setItems(remote.items);
         setMinutes(remote.minutes);
+        setDayMinutes(remote.dayMinutes);
         if (remote.weekStart != null) setWeekStart(remote.weekStart);
       }
     } catch (e) {
@@ -396,73 +399,73 @@ export default function TrainingLog() {
 
   const todayStr = ymd(new Date());
 
-  // ---- セル入力 ----
-  function openEditor(itemId: string, d: Date) {
-    const cur = minutes[`${itemId}:${ymd(d)}`] ?? 0;
-    setEditing({ itemId, date: d });
+  // ---- 項目の実施/未実施をトグル（即時保存）----
+  async function toggleItem(itemId: string, d: Date) {
+    const date = ymd(d);
+    const key = `${itemId}:${date}`;
+    const done = (minutes[`${itemId}:${date}`] ?? 0) > 0;
+    try {
+      if (supabase) {
+        if (done) await deleteRecord(itemId, date);
+        else await saveRecord(itemId, date, 1);
+      }
+      setMinutes((prev) => {
+        const next = { ...prev };
+        if (done) delete next[key];
+        else next[key] = 1;
+        return next;
+      });
+    } catch (e) {
+      console.warn("[record] toggle failed:", e);
+      alert("保存に失敗しました。通信状況を確認してもう一度お試しください。");
+    }
+  }
+
+  // ---- 日別トレーニング時間の入力 ----
+  function openEditor(d: Date) {
+    const cur = dayMinutes[ymd(d)] ?? 0;
+    setEditing(d);
     setEditVal(cur ? String(cur) : "");
     setCellError(null);
   }
-  // 「保存」: その場で Supabase に書き込み、成功したら画面に反映。失敗はモーダルに表示。
   async function applyEditor() {
     if (!editing) return;
-    const itemId = editing.itemId;
-    const date = ymd(editing.date);
-    const key = `${itemId}:${date}`;
+    const date = ymd(editing);
     const v = Math.max(0, Math.round(Number(editVal) || 0));
     setCellBusy(true);
     setCellError(null);
     try {
-      if (supabase) {
-        if (v > 0) await saveRecord(itemId, date, v);
-        else await deleteRecord(itemId, date);
-      }
-      setMinutes((prev) => {
+      if (supabase) await saveDayMinutes(date, v);
+      setDayMinutes((prev) => {
         const next = { ...prev };
-        if (v > 0) next[key] = v;
-        else delete next[key];
+        if (v > 0) next[date] = v;
+        else delete next[date];
         return next;
       });
       setEditing(null);
     } catch (e) {
-      console.warn("[record] save failed:", e);
+      console.warn("[record] day save failed:", e);
       setCellError("保存に失敗しました。通信状況を確認してもう一度お試しください。");
     } finally {
       setCellBusy(false);
     }
   }
-  // 「クリア」: その場で Supabase から削除。
-  async function clearEditor() {
-    if (!editing) return;
-    const itemId = editing.itemId;
-    const date = ymd(editing.date);
-    const key = `${itemId}:${date}`;
-    setCellBusy(true);
-    setCellError(null);
-    try {
-      if (supabase) await deleteRecord(itemId, date);
-      setMinutes((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setEditing(null);
-    } catch (e) {
-      console.warn("[record] delete failed:", e);
-      setCellError("削除に失敗しました。通信状況を確認してもう一度お試しください。");
-    } finally {
-      setCellBusy(false);
-    }
-  }
 
-  // 今週（週開始曜日基準）の合計（生値）。週別グラフの直近の週と一致する。
-  function weekTotal(itemId: string) {
+  // 今週（週開始曜日基準）の合計トレーニング時間（分）
+  function weekMinutes() {
     const ws = startOfWeek(startOfDay(new Date()), weekStart);
     let m = 0;
-    for (let k = 0; k < 7; k++) {
-      m += minutes[`${itemId}:${ymd(addDays(ws, k))}`] ?? 0;
-    }
+    for (let k = 0; k < 7; k++) m += dayMinutes[ymd(addDays(ws, k))] ?? 0;
     return m;
+  }
+  // 今週の実施日数（項目ごと）
+  function weekDoneCount(itemId: string) {
+    const ws = startOfWeek(startOfDay(new Date()), weekStart);
+    let c = 0;
+    for (let k = 0; k < 7; k++) {
+      if ((minutes[`${itemId}:${ymd(addDays(ws, k))}`] ?? 0) > 0) c++;
+    }
+    return c;
   }
 
   // ---- 設定: 項目の編集 ----
@@ -540,9 +543,6 @@ export default function TrainingLog() {
     setSettingsPane("menu"); // キャンセル/戻るで設定メニューに戻る
   }
 
-  const editingItem = editing
-    ? items.find((x) => x.id === editing.itemId)
-    : null;
 
   // ---- 下部タブバー ----
   const TABS: { id: "grid" | "charts" | "settings"; label: string; icon: ReactNode }[] = [
@@ -1116,7 +1116,7 @@ export default function TrainingLog() {
   if (view === "charts") {
     const today = startOfDay(new Date());
     // 表示範囲：最古の記録日（最低14日）〜今日
-    const recYmds = Object.keys(minutes).map((k) => k.slice(k.indexOf(":") + 1));
+    const recYmds = Object.keys(dayMinutes);
     const firstYmd = recYmds.length
       ? recYmds.reduce((a, b) => (a < b ? a : b))
       : ymd(today);
@@ -1137,14 +1137,10 @@ export default function TrainingLog() {
       addDays(wFirst, i * 7),
     );
 
-    const timeItems = items.filter((it) => it.unit === "time");
-    const countItems = items.filter((it) => it.unit === "count");
-
-    const sumDay = (group: Item[], d: Date) =>
-      group.reduce((s, it) => s + (minutes[`${it.id}:${ymd(d)}`] ?? 0), 0);
-    const sumWeek = (group: Item[], ws: Date) => {
+    const sumDay = (d: Date) => dayMinutes[ymd(d)] ?? 0;
+    const sumWeek = (ws: Date) => {
       let s = 0;
-      for (let k = 0; k < 7; k++) s += sumDay(group, addDays(ws, k));
+      for (let k = 0; k < 7; k++) s += sumDay(addDays(ws, k));
       return s;
     };
 
@@ -1270,81 +1266,30 @@ export default function TrainingLog() {
             </div>
           </header>
 
-          {timeItems.length > 0 && (
-            <>
-              <section className="mt-5">
-                <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-                  時間（分）・日別
-                </h2>
-                {renderBarChart(
-                  dayList.map((d) => ({
-                    value: sumDay(timeItems, d),
-                    x: dailyX(d),
-                  })),
-                  TIME_COLOR,
-                  fmtMin,
-                  DAY_W,
-                  timeDailyRef,
-                )}
-              </section>
-              <section className="mt-6">
-                <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-                  時間（分）・週別
-                </h2>
-                {renderBarChart(
-                  weekList.map((ws) => ({
-                    value: sumWeek(timeItems, ws),
-                    x: weeklyX(ws),
-                  })),
-                  TIME_COLOR,
-                  fmtMin,
-                  WEEK_W,
-                  timeWeeklyRef,
-                )}
-              </section>
-            </>
-          )}
-
-          {countItems.length > 0 && (
-            <>
-              <section className="mt-7">
-                <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-                  種目数（回）・日別
-                </h2>
-                {renderBarChart(
-                  dayList.map((d) => ({
-                    value: sumDay(countItems, d),
-                    x: dailyX(d),
-                  })),
-                  COUNT_COLOR,
-                  fmtC,
-                  DAY_W,
-                  countDailyRef,
-                )}
-              </section>
-              <section className="mt-6">
-                <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-                  種目数（回）・週別
-                </h2>
-                {renderBarChart(
-                  weekList.map((ws) => ({
-                    value: sumWeek(countItems, ws),
-                    x: weeklyX(ws),
-                  })),
-                  COUNT_COLOR,
-                  fmtC,
-                  WEEK_W,
-                  countWeeklyRef,
-                )}
-              </section>
-            </>
-          )}
-
-          {items.length === 0 && (
-            <p className="mt-6 text-center text-[15px] text-slate-700 dark:text-slate-300">
-              項目がありません。「設定」タブから登録してください。
-            </p>
-          )}
+          <section className="mt-5">
+            <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
+              トレーニング時間（分）・日別
+            </h2>
+            {renderBarChart(
+              dayList.map((d) => ({ value: sumDay(d), x: dailyX(d) })),
+              TIME_COLOR,
+              fmtMin,
+              DAY_W,
+              timeDailyRef,
+            )}
+          </section>
+          <section className="mt-6">
+            <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
+              トレーニング時間（分）・週別
+            </h2>
+            {renderBarChart(
+              weekList.map((ws) => ({ value: sumWeek(ws), x: weeklyX(ws) })),
+              TIME_COLOR,
+              fmtMin,
+              WEEK_W,
+              timeWeeklyRef,
+            )}
+          </section>
         </div>
         {tabBar}
       </>
@@ -1596,9 +1541,57 @@ export default function TrainingLog() {
                   </div>
                 </div>
 
-                {/* 種目行 */}
+                {/* トレーニング時間（分）の行 */}
+                <div className="flex items-stretch border-b-2 border-slate-200 dark:border-slate-700">
+                  <div
+                    className="sticky left-0 z-10 flex items-center gap-1.5 border-r border-card-border bg-card-bg px-2 py-2 dark:border-slate-800 dark:bg-slate-900"
+                    style={{ width: NAME_W }}
+                  >
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: TIME_COLOR }}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-medium text-slate-900 dark:text-slate-100">
+                        トレーニング時間
+                      </span>
+                      <span className="block text-[12px] text-muted">
+                        今週 {weekMinutes()}分
+                      </span>
+                    </span>
+                  </div>
+                  {gridDays.map((d, i) => {
+                    const v = dayMinutes[ymd(d)] ?? 0;
+                    const isWeekStart = d.getDay() === weekStart;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => openEditor(d)}
+                        className={`flex h-12 shrink-0 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800 ${
+                          isWeekStart
+                            ? "border-l border-slate-300 dark:border-slate-600"
+                            : ""
+                        }`}
+                        style={{ width: CELL_W }}
+                      >
+                        <span
+                          className="flex h-8 min-w-8 items-center justify-center rounded-lg px-1 text-[13px] font-semibold"
+                          style={
+                            v
+                              ? { backgroundColor: TIME_COLOR, color: "#fff" }
+                              : { boxShadow: "inset 0 0 0 1.5px rgb(203 213 225)" }
+                          }
+                        >
+                          {v ? `${v}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 項目行（実施チェック） */}
                 {items.map((it) => {
-                  const sum = weekTotal(it.id);
+                  const doneCount = weekDoneCount(it.id);
                   return (
                     <div
                       key={it.id}
@@ -1617,17 +1610,17 @@ export default function TrainingLog() {
                             {it.name}
                           </span>
                           <span className="block text-[12px] text-muted">
-                            今週 {sum}{it.unit === "time" ? "分" : "回"}
+                            今週 {doneCount}日
                           </span>
                         </span>
                       </div>
                       {gridDays.map((d, i) => {
-                        const val = minutes[`${it.id}:${ymd(d)}`] ?? 0;
+                        const done = (minutes[`${it.id}:${ymd(d)}`] ?? 0) > 0;
                         const isWeekStart = d.getDay() === weekStart;
                         return (
                           <button
                             key={i}
-                            onClick={() => openEditor(it.id, d)}
+                            onClick={() => toggleItem(it.id, d)}
                             className={`flex h-12 shrink-0 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800 ${
                               isWeekStart
                                 ? "border-l border-slate-300 dark:border-slate-600"
@@ -1636,14 +1629,14 @@ export default function TrainingLog() {
                             style={{ width: CELL_W }}
                           >
                             <span
-                              className="flex h-8 min-w-8 items-center justify-center rounded-lg px-1 text-[13px] font-semibold"
+                              className="flex h-8 w-8 items-center justify-center rounded-lg text-[15px] font-bold"
                               style={
-                                val
+                                done
                                   ? { backgroundColor: it.color, color: "#fff" }
-                                  : { boxShadow: "inset 0 0 0 1.5px rgb(203 213 225)" }
+                                  : { boxShadow: "inset 0 0 0 1.5px rgb(203 213 225)", color: "#cbd5e1" }
                               }
                             >
-                              {val ? `${val}` : ""}
+                              {done ? "✓" : ""}
                             </span>
                           </button>
                         );
@@ -1657,8 +1650,8 @@ export default function TrainingLog() {
         )}
       </div>
 
-      {/* セル入力モーダル */}
-      {editing && editingItem && (
+      {/* 日別トレーニング時間の入力モーダル */}
+      {editing && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16"
           onClick={() => setEditing(null)}
@@ -1667,20 +1660,11 @@ export default function TrainingLog() {
             className="w-full max-w-sm rounded-2xl bg-card-bg p-5 dark:bg-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-2">
-              <span
-                className="h-3.5 w-3.5 shrink-0 rounded-full"
-                style={{ backgroundColor: editingItem.color }}
-              />
-              <div>
-                <div className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-                  {editingItem.name}
-                </div>
-                <div className="text-[13px] text-muted">
-                  {editing.date.getMonth() + 1}/{editing.date.getDate()}（
-                  {WD[editing.date.getDay()]}）
-                </div>
-              </div>
+            <div className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
+              トレーニング時間
+            </div>
+            <div className="text-[13px] text-muted">
+              {editing.getMonth() + 1}/{editing.getDate()}（{WD[editing.getDay()]}）
             </div>
 
             <div className="mt-4 flex items-center gap-2">
@@ -1695,23 +1679,20 @@ export default function TrainingLog() {
                 className="w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[18px] font-semibold text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
               <span className="text-[16px] font-medium text-slate-700 dark:text-slate-300">
-                {editingItem.unit === "time" ? "分" : "回"}
+                分
               </span>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              {(editingItem.unit === "time" ? QUICK_TIME : QUICK_COUNT).map(
-                (m) => (
-                  <button
-                    key={m}
-                    onClick={() => setEditVal(String(m))}
-                    className="rounded-full bg-slate-100 px-3 py-1.5 text-[15px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                  >
-                    {m}
-                    {editingItem.unit === "time" ? "分" : "回"}
-                  </button>
-                ),
-              )}
+              {QUICK_TIME.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setEditVal(String(m))}
+                  className="rounded-full bg-slate-100 px-3 py-1.5 text-[15px] font-medium text-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                >
+                  {m}分
+                </button>
+              ))}
             </div>
 
             {cellError && (
@@ -1727,22 +1708,13 @@ export default function TrainingLog() {
             >
               {cellBusy ? "保存中…" : "保存"}
             </button>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={clearEditor}
-                disabled={cellBusy}
-                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100"
-              >
-                クリア
-              </button>
-              <button
-                onClick={() => setEditing(null)}
-                disabled={cellBusy}
-                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100"
-              >
-                キャンセル
-              </button>
-            </div>
+            <button
+              onClick={() => setEditing(null)}
+              disabled={cellBusy}
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100"
+            >
+              キャンセル
+            </button>
           </div>
         </div>
       )}

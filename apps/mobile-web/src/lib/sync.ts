@@ -14,7 +14,10 @@ export type Unit = "time" | "count";
 export type SyncItem = { id: string; name: string; color: string; unit: Unit };
 export type RemoteState = {
   items: SyncItem[];
+  // 項目の実施マーク。key=`${itemId}:${date}` -> 1（実施）。行が無ければ未実施。
   minutes: Record<string, number>;
+  // その日の合計トレーニング時間（分）。key=`${date}` -> 分。
+  dayMinutes: Record<string, number>;
   weekStart: number | null;
 };
 
@@ -74,11 +77,46 @@ export async function pullRemote(): Promise<RemoteState | null> {
   const minutes: Record<string, number> = {};
   for (const r of recRows ?? []) minutes[`${r.item_id}:${r.date}`] = r.value;
 
+  const { data: dmRows, error: e3 } = await to(
+    supabase.from("daily_minutes").select("date,minutes").eq("user_id", uid),
+  );
+  if (e3) throw e3;
+  const dayMinutes: Record<string, number> = {};
+  for (const r of dmRows ?? []) dayMinutes[r.date] = r.minutes;
+
   const { data: prof } = await to(
     supabase.from("profiles").select("week_start").eq("id", uid).single(),
   );
 
-  return { items, minutes, weekStart: prof?.week_start ?? null };
+  return { items, minutes, dayMinutes, weekStart: prof?.week_start ?? null };
+}
+
+// ---- その日の合計トレーニング時間（分）----
+export async function saveDayMinutes(
+  date: string,
+  minutes: number,
+): Promise<void> {
+  const uid = await requireUserId();
+  if (minutes > 0) {
+    const { error } = await to(
+      supabase!
+        .from("daily_minutes")
+        .upsert(
+          { user_id: uid, date, minutes },
+          { onConflict: "user_id,date" },
+        ),
+    );
+    if (error) throw error;
+  } else {
+    const { error } = await to(
+      supabase!
+        .from("daily_minutes")
+        .delete()
+        .eq("user_id", uid)
+        .eq("date", date),
+    );
+    if (error) throw error;
+  }
 }
 
 // ---- 記録（1件ずつ即時保存） ----
