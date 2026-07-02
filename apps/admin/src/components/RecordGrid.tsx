@@ -27,6 +27,8 @@ export function RecordGrid() {
   const [minutes, setMinutes] = useState<Minutes>({}); // 実施マーク
   const [dayMinutes, setDayMinutes] = useState<Record<string, number>>({});
   const [weekStart, setWeekStart] = useState<number>(1);
+  // グリッドは既定で参照モード。編集ボタンで切替（不用意な変更を防ぐ）。
+  const [gridEditing, setGridEditing] = useState(false);
 
   // 管理者/開発者用（全ユーザー）
   const [userGrids, setUserGrids] = useState<UserGrid[]>([]);
@@ -137,6 +139,26 @@ export function RecordGrid() {
       setCellBusy(false);
     }
   }
+  async function clearDay() {
+    if (!editingDay) return;
+    const date = ymd(editingDay);
+    setCellBusy(true);
+    setCellError(null);
+    try {
+      if (supabase) await saveDayMinutes(date, 0);
+      setDayMinutes((prev) => {
+        const next = { ...prev };
+        delete next[date];
+        return next;
+      });
+      setEditingDay(null);
+    } catch (e) {
+      console.warn("[record] day clear failed:", e);
+      setCellError("削除に失敗しました。通信状況を確認してもう一度お試しください。");
+    } finally {
+      setCellBusy(false);
+    }
+  }
 
   if (!loaded) {
     return loadError ? (
@@ -211,7 +233,21 @@ export function RecordGrid() {
     <div className="mx-auto max-w-5xl p-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-[20px] font-semibold text-foreground">ホーム</h2>
-        <RefreshButton onClick={loadData} />
+        <div className="flex items-center gap-2">
+          {items.length > 0 && (
+            <button
+              onClick={() => setGridEditing((v) => !v)}
+              className={`rounded-full border px-4 py-1.5 text-[14px] font-semibold ${
+                gridEditing
+                  ? "border-accent bg-accent text-white"
+                  : "border-slate-300 bg-card-bg text-accent"
+              }`}
+            >
+              {gridEditing ? "完了" : "編集"}
+            </button>
+          )}
+          <RefreshButton onClick={loadData} />
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -224,6 +260,7 @@ export function RecordGrid() {
           minutes={minutes}
           dayMinutes={dayMinutes}
           weekStart={weekStart}
+          readOnly={!gridEditing}
           onToggle={toggleItem}
           onEditDay={openDayEditor}
         />
@@ -284,13 +321,22 @@ export function RecordGrid() {
             >
               {cellBusy ? "保存中…" : "保存"}
             </button>
-            <button
-              onClick={() => setEditingDay(null)}
-              disabled={cellBusy}
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
-            >
-              キャンセル
-            </button>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={clearDay}
+                disabled={cellBusy}
+                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
+              >
+                クリア
+              </button>
+              <button
+                onClick={() => setEditingDay(null)}
+                disabled={cellBusy}
+                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -89,6 +89,8 @@ export default function TrainingLog() {
   const [minutes, setMinutes] = useState<Minutes>({}); // 項目の実施マーク（1=実施）
   const [dayMinutes, setDayMinutes] = useState<Record<string, number>>({}); // 日別合計時間(分)
   const [weekStart, setWeekStart] = useState<number>(1); // 0=日..6=土（既定=月）
+  // ホームのグリッドは既定で参照モード。編集ボタンで切替（不用意なタップ防止）。
+  const [gridEditing, setGridEditing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [view, setView] = useState<
     "grid" | "settings" | "charts" | "profile"
@@ -395,6 +397,8 @@ export default function TrainingLog() {
       setSettingsSnapshot(null);
       setSettingsPane("menu");
     }
+    // ホームから離れたらグリッドも参照モードに戻す
+    if (view !== "grid") setGridEditing(false);
   }, [view]);
 
   const todayStr = ymd(new Date());
@@ -446,6 +450,27 @@ export default function TrainingLog() {
     } catch (e) {
       console.warn("[record] day save failed:", e);
       setCellError("保存に失敗しました。通信状況を確認してもう一度お試しください。");
+    } finally {
+      setCellBusy(false);
+    }
+  }
+  // 「クリア」: その日の時間を削除。
+  async function clearEditor() {
+    if (!editing) return;
+    const date = ymd(editing);
+    setCellBusy(true);
+    setCellError(null);
+    try {
+      if (supabase) await saveDayMinutes(date, 0);
+      setDayMinutes((prev) => {
+        const next = { ...prev };
+        delete next[date];
+        return next;
+      });
+      setEditing(null);
+    } catch (e) {
+      console.warn("[record] day clear failed:", e);
+      setCellError("削除に失敗しました。通信状況を確認してもう一度お試しください。");
     } finally {
       setCellBusy(false);
     }
@@ -1361,7 +1386,19 @@ export default function TrainingLog() {
           </p>
         ) : (
           <>
-            <div className="mb-2 flex justify-end gap-2">
+            <div className="mb-2 flex items-center justify-end gap-2">
+              {supabase && session && (
+                <button
+                  onClick={() => setGridEditing((v) => !v)}
+                  className={`mr-auto rounded-full border px-4 py-1.5 text-[14px] font-semibold ${
+                    gridEditing
+                      ? "border-accent bg-accent text-white"
+                      : "border-slate-300 bg-card-bg text-accent dark:border-slate-600"
+                  }`}
+                >
+                  {gridEditing ? "完了" : "編集"}
+                </button>
+              )}
               {supabase && session && (
                 <button
                   onClick={refreshData}
@@ -1521,8 +1558,12 @@ export default function TrainingLog() {
                     return (
                       <button
                         key={i}
-                        onClick={() => openEditor(d)}
-                        className={`flex h-12 shrink-0 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800 ${
+                        onClick={gridEditing ? () => openEditor(d) : undefined}
+                        className={`flex h-12 shrink-0 items-center justify-center ${
+                          gridEditing
+                            ? "active:bg-slate-100 dark:active:bg-slate-800"
+                            : "cursor-default"
+                        } ${
                           isWeekStart
                             ? "border-l border-slate-300 dark:border-slate-600"
                             : ""
@@ -1575,8 +1616,12 @@ export default function TrainingLog() {
                         return (
                           <button
                             key={i}
-                            onClick={() => toggleItem(it.id, d)}
-                            className={`flex h-12 shrink-0 items-center justify-center active:bg-slate-100 dark:active:bg-slate-800 ${
+                            onClick={gridEditing ? () => toggleItem(it.id, d) : undefined}
+                            className={`flex h-12 shrink-0 items-center justify-center ${
+                              gridEditing
+                                ? "active:bg-slate-100 dark:active:bg-slate-800"
+                                : "cursor-default"
+                            } ${
                               isWeekStart
                                 ? "border-l border-slate-300 dark:border-slate-600"
                                 : ""
@@ -1663,13 +1708,22 @@ export default function TrainingLog() {
             >
               {cellBusy ? "保存中…" : "保存"}
             </button>
-            <button
-              onClick={() => setEditing(null)}
-              disabled={cellBusy}
-              className="mt-2 w-full rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100"
-            >
-              キャンセル
-            </button>
+            <div className="mt-2 flex gap-2">
+              <button
+                onClick={clearEditor}
+                disabled={cellBusy}
+                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100"
+              >
+                クリア
+              </button>
+              <button
+                onClick={() => setEditing(null)}
+                disabled={cellBusy}
+                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100"
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </div>
       )}
