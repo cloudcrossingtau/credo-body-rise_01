@@ -1446,7 +1446,11 @@ export default function TrainingLog() {
             {/* 種目名は左固定・日付部分は横スクロール。日付ヘッダ行は縦スクロールで上端固定。 */}
             <div
               ref={gridScrollRef}
-              className="mt-3 overflow-auto overscroll-none rounded-2xl border border-card-border bg-card-bg dark:border-slate-800 dark:bg-slate-900"
+              className={`mt-3 overflow-auto overscroll-none rounded-2xl bg-card-bg dark:bg-slate-900 ${
+                gridEditing
+                  ? "border-2 border-accent ring-2 ring-accent/20"
+                  : "border border-card-border dark:border-slate-800"
+              }`}
               style={{
                 maxHeight:
                   "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 200px)",
@@ -1575,7 +1579,9 @@ export default function TrainingLog() {
                           style={
                             v
                               ? { backgroundColor: TIME_COLOR, color: "#fff" }
-                              : { boxShadow: "inset 0 0 0 1.5px rgb(203 213 225)" }
+                              : gridEditing
+                                ? { boxShadow: "inset 0 0 0 1.5px rgb(147 197 253)" }
+                                : {}
                           }
                         >
                           {v ? `${v}` : ""}
@@ -1633,7 +1639,9 @@ export default function TrainingLog() {
                               style={
                                 done
                                   ? { backgroundColor: it.color, color: "#fff" }
-                                  : { boxShadow: "inset 0 0 0 1.5px rgb(209 217 226)", color: "#cbd5e1" }
+                                  : gridEditing
+                                    ? { boxShadow: "inset 0 0 0 1.5px rgb(203 213 225)", color: "#cbd5e1" }
+                                    : {}
                               }
                             >
                               {done ? "✓" : ""}

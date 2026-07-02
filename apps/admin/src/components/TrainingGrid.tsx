@@ -98,7 +98,11 @@ export function TrainingGrid({
   return (
     <div
       ref={scrollRef}
-      className="overflow-auto overscroll-none rounded-2xl border border-card-border bg-card-bg"
+      className={`overflow-auto overscroll-none rounded-2xl bg-card-bg ${
+        readOnly
+          ? "border border-card-border"
+          : "border-2 border-accent ring-2 ring-accent/20"
+      }`}
       style={{ maxHeight }}
     >
       <div style={{ minWidth: NAME_W + gridDays.length * CELL_W }}>
@@ -187,9 +191,15 @@ export function TrainingGrid({
             const inner = (
               <span
                 className="flex h-8 min-w-8 items-center justify-center rounded-lg px-1 text-[13px] font-semibold"
-                style={v > 0 ? { backgroundColor: TIME_COLOR, color: "#fff" } : { color: "#cbd5e1" }}
+                style={
+                  v > 0
+                    ? { backgroundColor: TIME_COLOR, color: "#fff" }
+                    : readOnly
+                      ? {}
+                      : { boxShadow: "inset 0 0 0 1.5px #93c5fd" }
+                }
               >
-                {v > 0 ? v : "·"}
+                {v > 0 ? v : ""}
               </span>
             );
             return readOnly ? (
@@ -237,7 +247,13 @@ export function TrainingGrid({
               const inner = (
                 <span
                   className="flex h-5.5 w-5.5 items-center justify-center rounded-full text-[12px] font-bold"
-                  style={done ? { backgroundColor: it.color, color: "#fff" } : { boxShadow: "inset 0 0 0 1.5px #d1d9e2", color: "#cbd5e1" }}
+                  style={
+                    done
+                      ? { backgroundColor: it.color, color: "#fff" }
+                      : readOnly
+                        ? {}
+                        : { boxShadow: "inset 0 0 0 1.5px #cbd5e1", color: "#cbd5e1" }
+                  }
                 >
                   {done ? "✓" : ""}
                 </span>
