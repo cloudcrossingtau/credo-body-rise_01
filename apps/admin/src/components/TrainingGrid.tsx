@@ -154,18 +154,27 @@ export function TrainingGrid({
           </div>
         </div>
 
-        {/* トレーニング時間（分）の行 */}
-        <div className="flex items-stretch border-b-2 border-slate-200">
+        {/* 合計トレーニング時間の行（見出し・親） */}
+        <div className="flex items-stretch border-b border-blue-100 bg-blue-50">
           <div
-            className="sticky left-0 z-10 flex items-center gap-2 border-r border-card-border bg-card-bg px-3 py-2"
+            className="sticky left-0 z-10 flex items-center gap-2 border-r border-blue-100 bg-blue-50 px-3 py-2"
             style={{ width: NAME_W }}
           >
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ backgroundColor: TIME_COLOR }}
-            />
+            <svg
+              className="shrink-0"
+              width={16}
+              height={16}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={TIME_COLOR}
+              strokeWidth={1.9}
+              strokeLinecap="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-medium text-slate-900">
+              <span className="block truncate text-[15px] font-bold text-blue-900">
                 トレーニング時間
               </span>
               <span className="block text-[12px] text-muted">
@@ -200,22 +209,22 @@ export function TrainingGrid({
           })}
         </div>
 
-        {/* 項目行（実施チェック） */}
+        {/* 項目行（内訳・子）: インデント＋小さめ丸チェック */}
         {items.map((it) => (
           <div
             key={it.id}
             className="flex items-stretch border-b border-slate-100 last:border-b-0"
           >
             <div
-              className="sticky left-0 z-10 flex items-center gap-2 border-r border-card-border bg-card-bg px-3 py-2"
+              className="sticky left-0 z-10 flex items-center gap-2 border-r border-card-border bg-card-bg py-2 pl-6 pr-3"
               style={{ width: NAME_W }}
             >
               <span
-                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: it.color }}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-medium text-slate-900">
+                <span className="block truncate text-[14px] font-medium text-slate-700">
                   {it.name}
                 </span>
                 <span className="block text-[12px] text-muted">
@@ -227,10 +236,10 @@ export function TrainingGrid({
               const done = (minutes[`${it.id}:${ymd(d)}`] ?? 0) > 0;
               const inner = (
                 <span
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-[15px] font-bold"
-                  style={done ? { backgroundColor: it.color, color: "#fff" } : { color: "#cbd5e1" }}
+                  className="flex h-5.5 w-5.5 items-center justify-center rounded-full text-[12px] font-bold"
+                  style={done ? { backgroundColor: it.color, color: "#fff" } : { boxShadow: "inset 0 0 0 1.5px #d1d9e2", color: "#cbd5e1" }}
                 >
-                  {done ? "✓" : "·"}
+                  {done ? "✓" : ""}
                 </span>
               );
               return readOnly ? (

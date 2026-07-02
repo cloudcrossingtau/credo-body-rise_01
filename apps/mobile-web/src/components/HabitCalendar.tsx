@@ -1487,18 +1487,27 @@ export default function TrainingLog() {
                   </div>
                 </div>
 
-                {/* トレーニング時間（分）の行 */}
-                <div className="flex items-stretch border-b-2 border-slate-200 dark:border-slate-700">
+                {/* 合計トレーニング時間の行（見出し・親） */}
+                <div className="flex items-stretch border-b border-blue-100 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/40">
                   <div
-                    className="sticky left-0 z-10 flex items-center gap-1.5 border-r border-card-border bg-card-bg px-2 py-2 dark:border-slate-800 dark:bg-slate-900"
+                    className="sticky left-0 z-10 flex items-center gap-1.5 border-r border-blue-100 bg-blue-50 px-2 py-2 dark:border-blue-900/50 dark:bg-blue-950/40"
                     style={{ width: NAME_W }}
                   >
-                    <span
-                      className="h-2.5 w-2.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: TIME_COLOR }}
-                    />
+                    <svg
+                      className="shrink-0"
+                      width={16}
+                      height={16}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke={TIME_COLOR}
+                      strokeWidth={1.9}
+                      strokeLinecap="round"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[15px] font-medium text-slate-900 dark:text-slate-100">
+                      <span className="block truncate text-[15px] font-bold text-blue-900 dark:text-blue-200">
                         トレーニング時間
                       </span>
                       <span className="block text-[12px] text-muted">
@@ -1535,7 +1544,7 @@ export default function TrainingLog() {
                   })}
                 </div>
 
-                {/* 項目行（実施チェック） */}
+                {/* 項目行（内訳・子）: インデント＋小さめ丸チェック */}
                 {items.map((it) => {
                   const doneCount = weekDoneCount(it.id);
                   return (
@@ -1544,15 +1553,15 @@ export default function TrainingLog() {
                       className="flex items-stretch border-b border-slate-100 last:border-b-0 dark:border-slate-800"
                     >
                       <div
-                        className="sticky left-0 z-10 flex items-center gap-1.5 border-r border-card-border bg-card-bg px-2 py-2 dark:border-slate-800 dark:bg-slate-900"
+                        className="sticky left-0 z-10 flex items-center gap-1.5 border-r border-card-border bg-card-bg py-2 pl-5 pr-2 dark:border-slate-800 dark:bg-slate-900"
                         style={{ width: NAME_W }}
                       >
                         <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          className="h-2 w-2 shrink-0 rounded-full"
                           style={{ backgroundColor: it.color }}
                         />
                         <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[15px] font-medium text-slate-900 dark:text-slate-100">
+                          <span className="block truncate text-[14px] font-medium text-slate-700 dark:text-slate-300">
                             {it.name}
                           </span>
                           <span className="block text-[12px] text-muted">
@@ -1575,11 +1584,11 @@ export default function TrainingLog() {
                             style={{ width: CELL_W }}
                           >
                             <span
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-[15px] font-bold"
+                              className="flex h-5.5 w-5.5 items-center justify-center rounded-full text-[12px] font-bold"
                               style={
                                 done
                                   ? { backgroundColor: it.color, color: "#fff" }
-                                  : { boxShadow: "inset 0 0 0 1.5px rgb(203 213 225)", color: "#cbd5e1" }
+                                  : { boxShadow: "inset 0 0 0 1.5px rgb(209 217 226)", color: "#cbd5e1" }
                               }
                             >
                               {done ? "✓" : ""}
