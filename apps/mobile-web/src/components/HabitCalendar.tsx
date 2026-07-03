@@ -1158,7 +1158,7 @@ export default function TrainingLog() {
 
     // 単色の棒グラフ（色分けなし）
     const renderBarChart = (
-      cols: { value: number; x: ReactNode }[],
+      cols: { value: number; x: ReactNode; boundary?: boolean }[],
       color: string,
       fmt: (v: number) => string,
       barW: number,
@@ -1196,7 +1196,7 @@ export default function TrainingLog() {
                   {cols.map((col, i) => (
                     <div
                       key={i}
-                      className="flex h-full flex-col items-center justify-end gap-0.5"
+                      className={`flex h-full flex-col items-center justify-end gap-0.5 ${col.boundary ? "border-l border-slate-200 dark:border-slate-700" : ""}`}
                       style={{ width: barW }}
                     >
                       {col.value > 0 && (
@@ -1217,7 +1217,11 @@ export default function TrainingLog() {
               </div>
               <div className="mt-1 flex">
                 {cols.map((col, i) => (
-                  <div key={i} style={{ width: barW }}>
+                  <div
+                    key={i}
+                    className={col.boundary ? "border-l border-slate-200 dark:border-slate-700" : undefined}
+                    style={{ width: barW }}
+                  >
                     {col.x}
                   </div>
                 ))}
@@ -1247,7 +1251,11 @@ export default function TrainingLog() {
               トレーニング時間（分）・日別
             </h2>
             {renderBarChart(
-              dayList.map((d) => ({ value: sumDay(d), x: dailyX(d) })),
+              dayList.map((d) => ({
+                value: sumDay(d),
+                x: dailyX(d),
+                boundary: d.getDay() === weekStart,
+              })),
               TIME_COLOR,
               fmtMin,
               DAY_W,

@@ -89,7 +89,7 @@ export function UserCharts({
   const fmt = (v: number) => `${Math.round(v)}`;
 
   const renderBarChart = (
-    cols: { value: number; x: ReactNode }[],
+    cols: { value: number; x: ReactNode; boundary?: boolean }[],
     barW: number,
     scrollRef: RefObject<HTMLDivElement>,
   ) => {
@@ -123,7 +123,7 @@ export function UserCharts({
                 {cols.map((col, i) => (
                   <div
                     key={i}
-                    className="flex h-full flex-col items-center justify-end gap-0.5"
+                    className={`flex h-full flex-col items-center justify-end gap-0.5 ${col.boundary ? "border-l border-slate-200" : ""}`}
                     style={{ width: barW }}
                   >
                     {col.value > 0 && (
@@ -144,7 +144,11 @@ export function UserCharts({
             </div>
             <div className="mt-1 flex">
               {cols.map((col, i) => (
-                <div key={i} style={{ width: barW }}>
+                <div
+                  key={i}
+                  className={col.boundary ? "border-l border-slate-200" : undefined}
+                  style={{ width: barW }}
+                >
                   {col.x}
                 </div>
               ))}
@@ -162,7 +166,11 @@ export function UserCharts({
           トレーニング時間（分）・日別
         </h3>
         {renderBarChart(
-          dayList.map((d) => ({ value: sumDay(d), x: dailyX(d) })),
+          dayList.map((d) => ({
+            value: sumDay(d),
+            x: dailyX(d),
+            boundary: d.getDay() === weekStart,
+          })),
           DAY_W,
           timeDailyRef,
         )}
