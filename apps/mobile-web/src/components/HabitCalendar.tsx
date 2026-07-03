@@ -1196,7 +1196,7 @@ export default function TrainingLog() {
                   {cols.map((col, i) => (
                     <div
                       key={i}
-                      className={`flex h-full flex-col items-center justify-end gap-0.5 ${col.boundary ? "border-l border-slate-200 dark:border-slate-700" : ""}`}
+                      className={`flex h-full flex-col items-center justify-end gap-0.5 ${col.boundary ? "border-l border-slate-300 dark:border-slate-600" : ""}`}
                       style={{ width: barW }}
                     >
                       {col.value > 0 && (
@@ -1219,7 +1219,7 @@ export default function TrainingLog() {
                 {cols.map((col, i) => (
                   <div
                     key={i}
-                    className={col.boundary ? "border-l border-slate-200 dark:border-slate-700" : undefined}
+                    className={col.boundary ? "border-l border-slate-300 dark:border-slate-600" : undefined}
                     style={{ width: barW }}
                   >
                     {col.x}

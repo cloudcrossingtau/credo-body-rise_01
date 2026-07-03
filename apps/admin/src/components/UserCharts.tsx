@@ -123,7 +123,7 @@ export function UserCharts({
                 {cols.map((col, i) => (
                   <div
                     key={i}
-                    className={`flex h-full flex-col items-center justify-end gap-0.5 ${col.boundary ? "border-l border-slate-200" : ""}`}
+                    className={`flex h-full flex-col items-center justify-end gap-0.5 ${col.boundary ? "border-l border-slate-300" : ""}`}
                     style={{ width: barW }}
                   >
                     {col.value > 0 && (
@@ -146,7 +146,7 @@ export function UserCharts({
               {cols.map((col, i) => (
                 <div
                   key={i}
-                  className={col.boundary ? "border-l border-slate-200" : undefined}
+                  className={col.boundary ? "border-l border-slate-300" : undefined}
                   style={{ width: barW }}
                 >
                   {col.x}
