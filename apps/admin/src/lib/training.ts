@@ -52,5 +52,5 @@ export const COUNT_COLOR = "#10b981"; // 種目数（回）= 緑
 
 // グリッドで遡れる日数（最大スクロール範囲）
 export const GRID_PAST_DAYS = 180;
-export const QUICK_TIME = [15, 30, 45, 60, 90];
+export const QUICK_TIME = [15, 30, 45, 60, 90, 120, 150, 180, 210, 240];
 export const QUICK_COUNT = [1, 2, 3, 4, 5];
