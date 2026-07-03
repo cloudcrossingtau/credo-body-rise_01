@@ -1559,7 +1559,7 @@ export default function TrainingLog() {
                     </svg>
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] font-bold leading-tight text-blue-900 dark:text-blue-200">
-                        トレーニング時間
+                        合計時間
                       </span>
                       <span className="block text-[12px] text-muted">
                         今週 {weekMinutes()}分
@@ -1679,7 +1679,7 @@ export default function TrainingLog() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-              トレーニング時間
+              合計時間
             </div>
             <div className="text-[13px] text-muted">
               {editing.getMonth() + 1}/{editing.getDate()}（{WD[editing.getDay()]}）

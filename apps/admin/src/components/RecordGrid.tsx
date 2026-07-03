@@ -277,7 +277,7 @@ export function RecordGrid() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-[16px] font-semibold text-slate-900">
-              トレーニング時間
+              合計時間
             </div>
             <div className="text-[13px] text-muted">
               {editingDay.getMonth() + 1}/{editingDay.getDate()}（
