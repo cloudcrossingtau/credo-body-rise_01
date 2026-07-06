@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { withTimeout } from "./recover";
+import { withTimeout, withRetry } from "./recover";
 
 // Supabase が唯一の正（source of truth）。普通のWebアプリと同じく、
 // 各操作はその場で Supabase に書き込み、成功/失敗を呼び出し側で扱う。
@@ -9,6 +9,18 @@ import { withTimeout } from "./recover";
 // 固まったら例外で返るので、呼び出し側で「失敗」として扱える（保存中のまま固定を防ぐ）。
 const to = <T>(p: PromiseLike<T>): Promise<T> =>
   withTimeout(() => Promise.resolve(p), 8000, "sync");
+
+// 書き込み用: タイムアウト＋即リトライ。Safari のタブ復帰直後などに
+// supabase-js のセッション処理が一時的に固まり最初の1回がタイムアウトする事象を、
+// 自動で2回目以降を試すことで乗り越える（読み取りが withRetry で自己回復するのと同じ）。
+// 各試行でクエリを作り直す必要があるため、ビルダーは「毎回生成する関数」で受け取る。
+// upsert / delete はいずれも冪等なので、サーバー側で成功済みでも再実行して問題ない。
+const toRetry = <T>(build: () => PromiseLike<T>, label: string): Promise<T> =>
+  withRetry(() => Promise.resolve(build()), {
+    timeoutMs: 8000,
+    maxAttempts: 3,
+    label,
+  });
 
 export type Unit = "time" | "count";
 export type SyncItem = { id: string; name: string; color: string; unit: Unit };
@@ -98,22 +110,26 @@ export async function saveDayMinutes(
 ): Promise<void> {
   const uid = await requireUserId();
   if (minutes > 0) {
-    const { error } = await to(
-      supabase!
-        .from("daily_minutes")
-        .upsert(
-          { user_id: uid, date, minutes },
-          { onConflict: "user_id,date" },
-        ),
+    const { error } = await toRetry(
+      () =>
+        supabase!
+          .from("daily_minutes")
+          .upsert(
+            { user_id: uid, date, minutes },
+            { onConflict: "user_id,date" },
+          ),
+      "saveDayMinutes",
     );
     if (error) throw error;
   } else {
-    const { error } = await to(
-      supabase!
-        .from("daily_minutes")
-        .delete()
-        .eq("user_id", uid)
-        .eq("date", date),
+    const { error } = await toRetry(
+      () =>
+        supabase!
+          .from("daily_minutes")
+          .delete()
+          .eq("user_id", uid)
+          .eq("date", date),
+      "saveDayMinutes(delete)",
     );
     if (error) throw error;
   }
@@ -127,13 +143,15 @@ export async function saveRecord(
   value: number,
 ): Promise<void> {
   const uid = await requireUserId();
-  const { error } = await to(
-    supabase!
-      .from("training_records")
-      .upsert(
-        { user_id: uid, item_id: itemId, date, value },
-        { onConflict: "user_id,item_id,date" },
-      ),
+  const { error } = await toRetry(
+    () =>
+      supabase!
+        .from("training_records")
+        .upsert(
+          { user_id: uid, item_id: itemId, date, value },
+          { onConflict: "user_id,item_id,date" },
+        ),
+    "saveRecord",
   );
   if (error) throw error;
 }
@@ -144,13 +162,15 @@ export async function deleteRecord(
   date: string,
 ): Promise<void> {
   const uid = await requireUserId();
-  const { error } = await to(
-    supabase!
-      .from("training_records")
-      .delete()
-      .eq("user_id", uid)
-      .eq("item_id", itemId)
-      .eq("date", date),
+  const { error } = await toRetry(
+    () =>
+      supabase!
+        .from("training_records")
+        .delete()
+        .eq("user_id", uid)
+        .eq("item_id", itemId)
+        .eq("date", date),
+    "deleteRecord",
   );
   if (error) throw error;
 }
