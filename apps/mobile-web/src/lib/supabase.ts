@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { withTimeout, autoReloadOnce } from "./recover";
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
@@ -43,3 +44,51 @@ export const supabase =
         global: { fetch: fetchWithTimeout },
       })
     : null;
+
+// タブ可視性に応じた自動トークン更新の制御（根本対処）＋復帰時の保険。
+//
+// 根本原因: supabase-js は既定でバックグラウンドでも一定間隔でトークン更新を試みる。
+// タブが Safari に凍結されると、その更新リクエストが宙ぶらりんのまま残り、復帰後に
+// 認証キューを詰まらせて以降の getSession()／保存が全てハングする。
+//
+// 対処: タブが隠れている間は自動更新を止め（詰まりの発生源を断つ）、戻ったら再開する。
+// これでリロードなしにシームレスへ。万一それでも詰まっていた場合の保険として、
+// 復帰時にセッションを3秒だけ確認し、返らなければ1回だけ自動リロードして確実に復旧する。
+if (supabase && typeof document !== "undefined") {
+  const stop = () => {
+    try {
+      void supabase!.auth.stopAutoRefresh();
+    } catch {
+      /* no-op */
+    }
+  };
+  let handling = false;
+  const resume = async () => {
+    if (handling || document.visibilityState !== "visible") return;
+    handling = true;
+    try {
+      // 自動更新を再開（内部で最新トークンへ更新される）。
+      try {
+        void supabase!.auth.startAutoRefresh();
+      } catch {
+        /* no-op */
+      }
+      // 保険: それでも詰まっていれば getSession が3秒で返らない → リロードで復旧。
+      await withTimeout(
+        () => supabase!.auth.getSession(),
+        3000,
+        "resume-probe",
+      );
+    } catch {
+      autoReloadOnce();
+    } finally {
+      handling = false;
+    }
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void resume();
+    else stop();
+  });
+  window.addEventListener("focus", () => void resume());
+  window.addEventListener("blur", stop);
+}

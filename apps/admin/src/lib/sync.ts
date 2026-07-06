@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { withTimeout, withRetry } from "./recover";
+import { withTimeout, withRetry, autoReloadOnce } from "./recover";
 
 // Supabase が唯一の正（source of truth）。普通のWebアプリと同じく、
 // 各操作はその場で Supabase に書き込み、成功/失敗を呼び出し側で扱う。
@@ -21,6 +21,24 @@ const toRetry = <T>(build: () => PromiseLike<T>, label: string): Promise<T> =>
     maxAttempts: 3,
     label,
   });
+
+// 書き込み前のセッション健全性チェック（詰まり検知＆即復旧）。
+// タブ/スリープ復帰後、supabase-js の内部が宙ぶらりんで詰まると、書き込みが
+// 使う内部 getSession() も巻き込まれて8秒×3回ハングする。書き込みの直前に
+// getSession() を短時間(3秒)だけ試し、返らなければ「詰まっている」と判断して
+// クライアントを作り直すため1回だけ自動リロードする（正常時は即返るので無害）。
+async function preflightOrReload(): Promise<void> {
+  try {
+    await withTimeout(
+      () => supabase!.auth.getSession(),
+      3000,
+      "preflight-getSession",
+    );
+  } catch (e) {
+    autoReloadOnce();
+    throw e;
+  }
+}
 
 export type Unit = "time" | "count";
 export type SyncItem = { id: string; name: string; color: string; unit: Unit };
@@ -112,6 +130,7 @@ export async function saveDayMinutes(
   minutes: number,
   userId?: string,
 ): Promise<void> {
+  await preflightOrReload();
   const uid = userId ?? (await requireUserId());
   if (minutes > 0) {
     const { error } = await toRetry(
@@ -148,6 +167,7 @@ export async function saveRecord(
   value: number,
   userId?: string,
 ): Promise<void> {
+  await preflightOrReload();
   const uid = userId ?? (await requireUserId());
   const { error } = await toRetry(
     () =>
@@ -169,6 +189,7 @@ export async function deleteRecord(
   date: string,
   userId?: string,
 ): Promise<void> {
+  await preflightOrReload();
   const uid = userId ?? (await requireUserId());
   const { error } = await toRetry(
     () =>
