@@ -14,6 +14,21 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { withRetry, autoReloadOnce } from "@/lib/recover";
 import { type Item, type Minutes, ymd, WD, QUICK_TIME } from "@/lib/training";
 
+// 失敗の実体を人間可読にする（Supabase の PostgrestError は Error インスタンス
+// ではなく {message, code, details, hint} のプレーンオブジェクト）。稀に保存が
+// 失敗した際、原因（タイムアウト/権限/通信など）が画面で分かるように表示に添える。
+function describeError(e: unknown): string {
+  if (e instanceof Error) return `${e.name}: ${e.message}`;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const parts = [o.message, o.code && `code=${o.code}`, o.details, o.hint]
+      .filter(Boolean)
+      .join(" / ");
+    return parts || JSON.stringify(e);
+  }
+  return String(e);
+}
+
 // ホーム（記録）。
 //   - 一般ユーザー: 自分のデータ（項目の実施チェック＋その日の合計時間を編集）。
 //   - 管理者/開発者: 全ユーザーのデータをユーザーごとの表で表示（閲覧のみ）。
@@ -32,8 +47,12 @@ export function RecordGrid() {
 
   // 管理者/開発者用（全ユーザー）
   const [userGrids, setUserGrids] = useState<UserGrid[]>([]);
+  // 開発者が編集中の対象ユーザー（1人ずつ）。null=全員閲覧のみ。
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const canEditOthers = role === "developer";
 
-  // 日別時間の入力モーダル（本人のみ）
+  // 日別時間の入力モーダル（本人／対象ユーザー共通）。
+  // editingUserId が非nullなら対象ユーザー、nullなら本人の日別時間を編集する。
   const [editingDay, setEditingDay] = useState<Date | null>(null);
   const [dayVal, setDayVal] = useState("");
   const [cellBusy, setCellBusy] = useState(false);
@@ -107,15 +126,69 @@ export function RecordGrid() {
       });
     } catch (e) {
       console.warn("[record] toggle failed:", e);
-      alert("保存に失敗しました。通信状況を確認してもう一度お試しください。");
+      alert("保存に失敗しました: " + describeError(e));
     }
   }
 
-  function openDayEditor(d: Date) {
-    const cur = dayMinutes[ymd(d)] ?? 0;
+  // 開発者が対象ユーザーの項目実施をトグル（即時保存）。
+  async function toggleUserItem(userId: string, itemId: string, d: Date) {
+    const date = ymd(d);
+    const u = userGrids.find((x) => x.id === userId);
+    if (!u) return;
+    const key = `${itemId}:${date}`;
+    const done = (u.minutes[key] ?? 0) > 0;
+    try {
+      if (supabase) {
+        if (done) await deleteRecord(itemId, date, userId);
+        else await saveRecord(itemId, date, 1, userId);
+      }
+      setUserGrids((prev) =>
+        prev.map((x) => {
+          if (x.id !== userId) return x;
+          const m = { ...x.minutes };
+          if (done) delete m[key];
+          else m[key] = 1;
+          return { ...x, minutes: m };
+        }),
+      );
+    } catch (e) {
+      console.warn("[record] toggle(other) failed:", e);
+      alert("保存に失敗しました: " + describeError(e));
+    }
+  }
+
+  // 日別時間モーダルを開く。userId 省略＝本人、指定＝対象ユーザー。
+  function openDayEditor(d: Date, userId?: string) {
+    const src = userId
+      ? (userGrids.find((x) => x.id === userId)?.dayMinutes ?? {})
+      : dayMinutes;
+    const cur = src[ymd(d)] ?? 0;
+    setEditingUserId(userId ?? null);
     setEditingDay(d);
     setDayVal(cur ? String(cur) : "");
     setCellError(null);
+  }
+  // 日別時間の保存結果をローカル反映（対象ユーザー or 本人）。
+  function applyDayLocal(date: string, v: number) {
+    if (editingUserId) {
+      const uid = editingUserId;
+      setUserGrids((prev) =>
+        prev.map((x) => {
+          if (x.id !== uid) return x;
+          const dm = { ...x.dayMinutes };
+          if (v > 0) dm[date] = v;
+          else delete dm[date];
+          return { ...x, dayMinutes: dm };
+        }),
+      );
+    } else {
+      setDayMinutes((prev) => {
+        const next = { ...prev };
+        if (v > 0) next[date] = v;
+        else delete next[date];
+        return next;
+      });
+    }
   }
   async function applyDay() {
     if (!editingDay) return;
@@ -124,17 +197,12 @@ export function RecordGrid() {
     setCellBusy(true);
     setCellError(null);
     try {
-      if (supabase) await saveDayMinutes(date, v);
-      setDayMinutes((prev) => {
-        const next = { ...prev };
-        if (v > 0) next[date] = v;
-        else delete next[date];
-        return next;
-      });
+      if (supabase) await saveDayMinutes(date, v, editingUserId ?? undefined);
+      applyDayLocal(date, v);
       setEditingDay(null);
     } catch (e) {
       console.warn("[record] day save failed:", e);
-      setCellError("保存に失敗しました。通信状況を確認してもう一度お試しください。");
+      setCellError("保存に失敗しました: " + describeError(e));
     } finally {
       setCellBusy(false);
     }
@@ -145,20 +213,99 @@ export function RecordGrid() {
     setCellBusy(true);
     setCellError(null);
     try {
-      if (supabase) await saveDayMinutes(date, 0);
-      setDayMinutes((prev) => {
-        const next = { ...prev };
-        delete next[date];
-        return next;
-      });
+      if (supabase) await saveDayMinutes(date, 0, editingUserId ?? undefined);
+      applyDayLocal(date, 0);
       setEditingDay(null);
     } catch (e) {
       console.warn("[record] day clear failed:", e);
-      setCellError("削除に失敗しました。通信状況を確認してもう一度お試しください。");
+      setCellError("削除に失敗しました: " + describeError(e));
     } finally {
       setCellBusy(false);
     }
   }
+
+  // 日別トレーニング時間の入力モーダル（本人／対象ユーザー共通）。
+  const dayModal = editingDay && (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24"
+      onClick={() => setEditingDay(null)}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl bg-card-bg p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="text-[16px] font-semibold text-slate-900">合計時間</div>
+        <div className="text-[13px] text-muted">
+          {editingUserId && (
+            <span className="mr-1 font-medium text-accent">
+              {userGrids.find((x) => x.id === editingUserId)?.nickname?.trim() ||
+                userGrids
+                  .find((x) => x.id === editingUserId)
+                  ?.email?.split("@")[0] ||
+                "対象ユーザー"}
+              ・
+            </span>
+          )}
+          {editingDay.getMonth() + 1}/{editingDay.getDate()}（
+          {WD[editingDay.getDay()]}）
+        </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={dayVal}
+            onChange={(e) => setDayVal(e.target.value)}
+            placeholder="0"
+            autoFocus
+            className="w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[18px] font-semibold text-slate-900 placeholder:text-slate-400"
+          />
+          <span className="text-[16px] font-medium text-slate-700">分</span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {QUICK_TIME.map((m) => (
+            <button
+              key={m}
+              onClick={() => setDayVal(String(m))}
+              className="rounded-full bg-slate-100 px-3 py-1.5 text-[15px] font-medium text-slate-800 hover:bg-slate-200"
+            >
+              {m}分
+            </button>
+          ))}
+        </div>
+
+        {cellError && (
+          <p className="mt-4 text-[14px] font-medium text-red-600">{cellError}</p>
+        )}
+
+        <button
+          onClick={applyDay}
+          disabled={cellBusy}
+          className="mt-5 w-full rounded-xl bg-accent px-4 py-2.5 text-[16px] font-semibold text-white active:opacity-90 disabled:opacity-50"
+        >
+          {cellBusy ? "保存中…" : "保存"}
+        </button>
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={clearDay}
+            disabled={cellBusy}
+            className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
+          >
+            クリア
+          </button>
+          <button
+            onClick={() => setEditingDay(null)}
+            disabled={cellBusy}
+            className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
+          >
+            キャンセル
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   if (!loaded) {
     return loadError ? (
@@ -176,23 +323,26 @@ export function RecordGrid() {
     );
   }
 
-  // ===== 管理者/開発者: 全ユーザー（閲覧のみ）=====
+  // ===== 管理者/開発者: 全ユーザー =====
+  // 開発者のみ、ユーザーごとに編集可（1人ずつ）。管理者は閲覧のみ。
   if (isManager) {
     return (
       <div className="mx-auto max-w-5xl p-6">
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-[20px] font-semibold text-foreground">ホーム</h2>
-          <RefreshButton onClick={loadData} />
+          <RefreshButton onClick={loadData} disabled={editingUserId != null} />
         </div>
         <p className="mb-5 text-[13px] text-muted">
-          全ユーザーの記録を表示しています（{roleLabel(role ?? "")}・閲覧専用）。
-          登録ユーザー {userGrids.length} 名。
+          全ユーザーの記録を表示しています（{roleLabel(role ?? "")}
+          {canEditOthers ? "・編集可" : "・閲覧専用"}）。 登録ユーザー{" "}
+          {userGrids.length} 名。
         </p>
 
         <div className="space-y-8">
           {userGrids.map((u) => {
             const avatarUrl = getAvatarUrl(u.avatarPath);
             const name = u.nickname?.trim() || u.email?.split("@")[0] || "（名称未設定）";
+            const editingThis = editingUserId === u.id;
             return (
               <section key={u.id}>
                 <div className="mb-2 flex items-center gap-3">
@@ -206,13 +356,34 @@ export function RecordGrid() {
                     </p>
                     <p className="truncate text-[12px] text-muted">{u.email ?? "-"}</p>
                   </div>
+                  {canEditOthers && (
+                    <button
+                      onClick={() =>
+                        setEditingUserId((cur) => (cur === u.id ? null : u.id))
+                      }
+                      disabled={editingUserId != null && !editingThis}
+                      className={`shrink-0 rounded-full border px-4 py-1.5 text-[14px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${
+                        editingThis
+                          ? "border-accent bg-accent text-white"
+                          : "border-slate-300 bg-card-bg text-accent"
+                      }`}
+                    >
+                      {editingThis ? "完了" : "編集"}
+                    </button>
+                  )}
                 </div>
                 <TrainingGrid
                   items={u.items}
                   minutes={u.minutes}
                   dayMinutes={u.dayMinutes}
                   weekStart={u.weekStart}
-                  readOnly
+                  readOnly={!editingThis}
+                  onToggle={
+                    editingThis
+                      ? (itemId, d) => toggleUserItem(u.id, itemId, d)
+                      : undefined
+                  }
+                  onEditDay={editingThis ? (d) => openDayEditor(d, u.id) : undefined}
                   maxHeight="none"
                 />
               </section>
@@ -224,6 +395,7 @@ export function RecordGrid() {
             </p>
           )}
         </div>
+        {dayModal}
       </div>
     );
   }
@@ -266,80 +438,7 @@ export function RecordGrid() {
         />
       )}
 
-      {/* 日別トレーニング時間の入力モーダル */}
-      {editingDay && (
-        <div
-          className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-24"
-          onClick={() => setEditingDay(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl bg-card-bg p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="text-[16px] font-semibold text-slate-900">
-              合計時間
-            </div>
-            <div className="text-[13px] text-muted">
-              {editingDay.getMonth() + 1}/{editingDay.getDate()}（
-              {WD[editingDay.getDay()]}）
-            </div>
-
-            <div className="mt-4 flex items-center gap-2">
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={dayVal}
-                onChange={(e) => setDayVal(e.target.value)}
-                placeholder="0"
-                autoFocus
-                className="w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[18px] font-semibold text-slate-900 placeholder:text-slate-400"
-              />
-              <span className="text-[16px] font-medium text-slate-700">分</span>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {QUICK_TIME.map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setDayVal(String(m))}
-                  className="rounded-full bg-slate-100 px-3 py-1.5 text-[15px] font-medium text-slate-800 hover:bg-slate-200"
-                >
-                  {m}分
-                </button>
-              ))}
-            </div>
-
-            {cellError && (
-              <p className="mt-4 text-[14px] font-medium text-red-600">{cellError}</p>
-            )}
-
-            <button
-              onClick={applyDay}
-              disabled={cellBusy}
-              className="mt-5 w-full rounded-xl bg-accent px-4 py-2.5 text-[16px] font-semibold text-white active:opacity-90 disabled:opacity-50"
-            >
-              {cellBusy ? "保存中…" : "保存"}
-            </button>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={clearDay}
-                disabled={cellBusy}
-                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
-              >
-                クリア
-              </button>
-              <button
-                onClick={() => setEditingDay(null)}
-                disabled={cellBusy}
-                className="flex-1 rounded-xl border border-slate-300 bg-card-bg px-4 py-2.5 text-[16px] font-medium text-slate-800 disabled:opacity-50"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {dayModal}
     </div>
   );
 }
