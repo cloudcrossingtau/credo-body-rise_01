@@ -49,6 +49,8 @@ export function RecordGrid() {
   const [userGrids, setUserGrids] = useState<UserGrid[]>([]);
   // 開発者が編集中の対象ユーザー（1人ずつ）。null=全員閲覧のみ。
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  // ログイン中の自分のID（他メンバー判定＝警告表示のため）。
+  const [myId, setMyId] = useState<string | null>(null);
   const canEditOthers = role === "developer";
 
   // 日別時間の入力モーダル（本人／対象ユーザー共通）。
@@ -75,6 +77,7 @@ export function RecordGrid() {
       });
       const r = p?.role ?? "general";
       setRole(r);
+      setMyId(p?.id ?? null);
       if (r === "admin" || r === "developer") {
         setUserGrids(
           await withRetry(() => pullAllUserGrids(), {
@@ -128,6 +131,24 @@ export function RecordGrid() {
       console.warn("[record] toggle failed:", e);
       alert("保存に失敗しました: " + describeError(e));
     }
+  }
+
+  // 編集モードの開始/終了。他メンバーを編集する時は開始前に警告を出す（nouker 準拠）。
+  // 自分自身の行は警告なし。編集中は下部に警告バナーも常時表示する。
+  function toggleEditUser(userId: string, name: string) {
+    if (editingUserId === userId) {
+      setEditingUserId(null); // 「完了」
+      return;
+    }
+    if (userId !== myId) {
+      const ok = window.confirm(
+        `[警告] 他のメンバーのデータを編集します\n\n` +
+          `対象: ${name}\n\n` +
+          `ここでの実施チェック・合計時間の変更は、${name} さんのデータに直接反映されます。続行しますか？`,
+      );
+      if (!ok) return;
+    }
+    setEditingUserId(userId);
   }
 
   // 開発者が対象ユーザーの項目実施をトグル（即時保存）。
@@ -358,9 +379,7 @@ export function RecordGrid() {
                   </div>
                   {canEditOthers && (
                     <button
-                      onClick={() =>
-                        setEditingUserId((cur) => (cur === u.id ? null : u.id))
-                      }
+                      onClick={() => toggleEditUser(u.id, name)}
                       disabled={editingUserId != null && !editingThis}
                       className={`shrink-0 rounded-full border px-4 py-1.5 text-[14px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed ${
                         editingThis
@@ -372,6 +391,24 @@ export function RecordGrid() {
                     </button>
                   )}
                 </div>
+                {editingThis && u.id !== myId && (
+                  <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[14px] font-medium text-amber-800">
+                    <svg
+                      className="h-5 w-5 shrink-0"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.8}
+                        d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                      />
+                    </svg>
+                    他のメンバー（{name} さん）のデータを編集中です。変更は即時反映されます。
+                  </div>
+                )}
                 <TrainingGrid
                   items={u.items}
                   minutes={u.minutes}
