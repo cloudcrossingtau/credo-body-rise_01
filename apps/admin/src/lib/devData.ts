@@ -15,6 +15,7 @@ export type UserGrid = {
   role: string;
   weekStart: number;
   items: Item[];
+  categories: { id: string; name: string; color: string }[]; // sort_order 順
   minutes: Minutes; // itemId:date -> 1（実施マーク・このユーザー分）
   dayMinutes: Record<string, number>; // date -> 合計時間(分)
   recordCount: number;
@@ -39,7 +40,10 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
       .order("sort_order", { ascending: true }),
     supabase.from("training_records").select("user_id,item_id,date,value"),
     supabase.from("daily_minutes").select("user_id,date,minutes"),
-    supabase.from("categories").select("id,name,color"),
+    supabase
+      .from("categories")
+      .select("id,user_id,name,color,sort_order")
+      .order("sort_order", { ascending: true }),
   ]);
   if (ep) throw ep;
   if (ei) throw ei;
@@ -48,8 +52,16 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
   if (ecc) throw ecc;
 
   const catById = new Map<string, { name: string; color: string }>();
-  for (const c of cats ?? [])
+  const categoriesByUser = new Map<
+    string,
+    { id: string; name: string; color: string }[]
+  >();
+  for (const c of cats ?? []) {
     catById.set(c.id, { name: c.name, color: c.color });
+    const list = categoriesByUser.get(c.user_id) ?? [];
+    list.push({ id: c.id, name: c.name, color: c.color }); // sort_order 順で取得済み
+    categoriesByUser.set(c.user_id, list);
+  }
 
   const itemsByUser = new Map<string, Item[]>();
   for (const it of items ?? []) {
@@ -90,6 +102,7 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
     role: p.role,
     weekStart: p.week_start ?? 1,
     items: itemsByUser.get(p.id) ?? [],
+    categories: categoriesByUser.get(p.id) ?? [],
     minutes: minutesByUser.get(p.id) ?? {},
     dayMinutes: dayMinutesByUser.get(p.id) ?? {},
     recordCount: recCountByUser.get(p.id) ?? 0,

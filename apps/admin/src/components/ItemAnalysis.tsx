@@ -45,6 +45,15 @@ type Row = {
   categoryName: string;
 };
 const UNCAT_KEY = "__uncat__";
+
+// カテゴリキーの並び順（categoryOrder=カテゴリ設定の sort_order 順）。未分類は末尾。
+function catRanker(categoryOrder: string[]) {
+  return (key: string) => {
+    if (key === UNCAT_KEY) return 1e9;
+    const i = categoryOrder.indexOf(key);
+    return i < 0 ? 1e9 - 1 : i;
+  };
+}
 // 比較表示用: cur=今期間, prev=前期間（比較OFF時は null）。
 type CmpRow = {
   id: string;
@@ -103,7 +112,7 @@ function countRows(
 }
 
 // 項目別の行を、各項目のカテゴリで合算する（のべ回数＝項目の実施日数の合計）。
-function toCategoryRows(itemRows: Row[]): Row[] {
+function toCategoryRows(itemRows: Row[], categoryOrder: string[]): Row[] {
   const byCat = new Map<string, { count: number; color: string; name: string }>();
   const order: string[] = [];
   for (const r of itemRows) {
@@ -116,6 +125,8 @@ function toCategoryRows(itemRows: Row[]): Row[] {
       order.push(key);
     }
   }
+  const rank = catRanker(categoryOrder);
+  order.sort((a, b) => rank(a) - rank(b));
   return order.map((key) => {
     const v = byCat.get(key)!;
     return {
@@ -136,6 +147,7 @@ function categoryDayRows(
   minutes: Minutes,
   start: Date,
   today: Date,
+  categoryOrder: string[],
 ): Row[] {
   const s = ymd(start);
   const e = ymd(today);
@@ -153,6 +165,8 @@ function categoryDayRows(
       order.push(key);
     }
   }
+  const rank = catRanker(categoryOrder);
+  order.sort((a, b) => rank(a) - rank(b));
   const daysByCat = new Map<string, Set<string>>();
   for (const key of Object.keys(minutes)) {
     if ((minutes[key] ?? 0) <= 0) continue;
@@ -184,12 +198,13 @@ function rowsFor(
   minutes: Minutes,
   start: Date,
   end: Date,
+  categoryOrder: string[],
 ): Row[] {
   if (mode === "category" && catMetric === "days") {
-    return categoryDayRows(items, minutes, start, end);
+    return categoryDayRows(items, minutes, start, end, categoryOrder);
   }
   const itemRows = countRows(items, minutes, start, end);
-  return mode === "category" ? toCategoryRows(itemRows) : itemRows;
+  return mode === "category" ? toCategoryRows(itemRows, categoryOrder) : itemRows;
 }
 
 // レーダー（3項目以上のとき）。各軸=項目、長さ=実施回数。バランスの偏りを客観表示。
@@ -407,6 +422,7 @@ function ItemCharts({
   mode,
   catMetric,
   compare,
+  categoryOrder,
 }: {
   items: Item[];
   minutes: Minutes;
@@ -415,6 +431,7 @@ function ItemCharts({
   mode: ViewMode;
   catMetric: CatMetric;
   compare: boolean;
+  categoryOrder: string[];
 }) {
   if (items.length === 0) {
     return (
@@ -423,14 +440,39 @@ function ItemCharts({
   }
   const today = startOfDay(new Date());
   const start = periodStart(period, today, weekStart);
-  const curRows = rowsFor(mode, catMetric, items, minutes, start, today);
+  const curRows = rowsFor(
+    mode,
+    catMetric,
+    items,
+    minutes,
+    start,
+    today,
+    categoryOrder,
+  );
 
+  const pw = compare ? prevWindow(period, today, weekStart) : null;
   let prevById: Map<string, number> | null = null;
-  if (compare) {
-    const pw = prevWindow(period, today, weekStart);
-    const prevRows = rowsFor(mode, catMetric, items, minutes, pw.start, pw.end);
+  if (pw) {
+    const prevRows = rowsFor(
+      mode,
+      catMetric,
+      items,
+      minutes,
+      pw.start,
+      pw.end,
+      categoryOrder,
+    );
     prevById = new Map(prevRows.map((r) => [r.id, r.count]));
   }
+  // 今週は日付範囲、今月は「◯月」だけ表示。
+  const md = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const curRange =
+    period === "week" ? `${md(start)}〜${md(today)}` : `${today.getMonth() + 1}月`;
+  const prevRange = pw
+    ? period === "week"
+      ? `${md(pw.start)}〜${md(pw.end)}`
+      : `${pw.start.getMonth() + 1}月`
+    : null;
 
   const rows: CmpRow[] = curRows.map((r) => ({
     id: r.id,
@@ -451,17 +493,23 @@ function ItemCharts({
 
   return (
     <div className="rounded-2xl border border-card-border bg-card-bg p-4">
-      {compare && (
-        <div className="mb-2 flex items-center gap-4 text-[13px] text-slate-600">
+      {compare ? (
+        <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-600">
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-2.5 w-4 rounded-sm bg-accent" />
             {PERIOD_LABEL[period]}
+            <span className="text-[12px] text-muted">{curRange}</span>
           </span>
           <span className="flex items-center gap-1.5">
             <span className="inline-block h-0 w-4 border-t-2 border-dashed border-slate-400" />
             {prevLabel}（全体）
+            <span className="text-[12px] text-muted">{prevRange}</span>
           </span>
         </div>
+      ) : (
+        <p className="mb-2 text-[12px] text-muted">
+          {PERIOD_LABEL[period]} {curRange}
+        </p>
       )}
       {items.length >= 3 && <Radar rows={rows} max={max} showPrev={compare} />}
       <BarList rows={rows} max={max} showPrev={compare} />
@@ -483,6 +531,7 @@ export function ItemAnalysis() {
   const [items, setItems] = useState<Item[]>([]);
   const [minutes, setMinutes] = useState<Minutes>({});
   const [weekStart, setWeekStart] = useState<number>(1);
+  const [catOrder, setCatOrder] = useState<string[]>([]); // 本人のカテゴリ並び順(id)
 
   // 管理者/開発者用
   const [userGrids, setUserGrids] = useState<UserGrid[]>([]);
@@ -521,6 +570,7 @@ export function ItemAnalysis() {
         if (remote) {
           setItems(remote.items);
           setMinutes(remote.minutes);
+          setCatOrder(remote.categories.map((c) => c.id));
           if (remote.weekStart != null) setWeekStart(remote.weekStart);
         }
       }
@@ -641,6 +691,7 @@ export function ItemAnalysis() {
                   mode={mode}
                   catMetric={catMetric}
                   compare={compare}
+                  categoryOrder={u.categories.map((c) => c.id)}
                 />
               </section>
             );
@@ -674,6 +725,7 @@ export function ItemAnalysis() {
         mode={mode}
         catMetric={catMetric}
         compare={compare}
+        categoryOrder={catOrder}
       />
     </div>
   );

@@ -10,6 +10,15 @@ type Period = "week" | "month";
 type CatMetric = "days" | "total";
 const UNCAT_KEY = "__uncat__";
 
+// カテゴリキーの並び順（categoryOrder=カテゴリ設定の sort_order 順）。未分類は末尾。
+function catRanker(categoryOrder: string[]) {
+  return (key: string) => {
+    if (key === UNCAT_KEY) return 1e9;
+    const i = categoryOrder.indexOf(key);
+    return i < 0 ? 1e9 - 1 : i;
+  };
+}
+
 function ymd(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -54,6 +63,7 @@ function categoryDayRows(
   minutes: Minutes,
   start: Date,
   end: Date,
+  categoryOrder: string[],
 ): Row[] {
   const s = ymd(start);
   const e = ymd(end);
@@ -70,6 +80,8 @@ function categoryDayRows(
       order.push(key);
     }
   }
+  const rank = catRanker(categoryOrder);
+  order.sort((a, b) => rank(a) - rank(b));
   const daysByCat = new Map<string, Set<string>>();
   for (const k of Object.keys(minutes)) {
     if ((minutes[k] ?? 0) <= 0) continue;
@@ -97,6 +109,7 @@ function categoryTotalRows(
   minutes: Minutes,
   start: Date,
   end: Date,
+  categoryOrder: string[],
 ): Row[] {
   const s = ymd(start);
   const e = ymd(end);
@@ -122,6 +135,8 @@ function categoryTotalRows(
       order.push(key);
     }
   }
+  const rank = catRanker(categoryOrder);
+  order.sort((a, b) => rank(a) - rank(b));
   return order.map((key) => {
     const v = byCat.get(key)!;
     return { id: key, name: v.name, color: v.color, count: v.count };
@@ -134,10 +149,11 @@ function rowsFor(
   minutes: Minutes,
   start: Date,
   end: Date,
+  categoryOrder: string[],
 ): Row[] {
   return metric === "days"
-    ? categoryDayRows(items, minutes, start, end)
-    : categoryTotalRows(items, minutes, start, end);
+    ? categoryDayRows(items, minutes, start, end, categoryOrder)
+    : categoryTotalRows(items, minutes, start, end, categoryOrder);
 }
 
 type CmpRow = {
@@ -345,10 +361,12 @@ export function MobileBalance({
   items,
   minutes,
   weekStart,
+  categoryOrder,
 }: {
   items: Item[];
   minutes: Minutes;
   weekStart: number;
+  categoryOrder: string[];
 }) {
   const [period, setPeriod] = useState<Period>("week");
   const [catMetric, setCatMetric] = useState<CatMetric>("days");
@@ -369,13 +387,29 @@ export function MobileBalance({
 
   const today = startOfDay(new Date());
   const start = periodStart(period, today, weekStart);
-  const curRows = rowsFor(catMetric, items, minutes, start, today);
+  const curRows = rowsFor(catMetric, items, minutes, start, today, categoryOrder);
+  const pw = compare ? prevWindow(period, today, weekStart) : null;
   let prevById: Map<string, number> | null = null;
-  if (compare) {
-    const pw = prevWindow(period, today, weekStart);
-    const prevRows = rowsFor(catMetric, items, minutes, pw.start, pw.end);
+  if (pw) {
+    const prevRows = rowsFor(
+      catMetric,
+      items,
+      minutes,
+      pw.start,
+      pw.end,
+      categoryOrder,
+    );
     prevById = new Map(prevRows.map((r) => [r.id, r.count]));
   }
+  // 今週は日付範囲、今月は「◯月」だけ表示。
+  const md = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}`;
+  const curRange =
+    period === "week" ? `${md(start)}〜${md(today)}` : `${today.getMonth() + 1}月`;
+  const prevRange = pw
+    ? period === "week"
+      ? `${md(pw.start)}〜${md(pw.end)}`
+      : `${pw.start.getMonth() + 1}月`
+    : null;
   const rows: CmpRow[] = curRows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -420,17 +454,23 @@ export function MobileBalance({
       </div>
 
       <div className="mt-3 rounded-2xl border border-card-border bg-card-bg p-4">
-        {compare && (
-          <div className="mb-2 flex items-center gap-4 text-[13px] text-slate-600">
+        {compare ? (
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-600">
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-4 rounded-sm bg-accent" />
               {period === "week" ? "今週" : "今月"}
+              <span className="text-[12px] text-muted">{curRange}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-0 w-4 border-t-2 border-dashed border-slate-400" />
               {prevLabel}（全体）
+              <span className="text-[12px] text-muted">{prevRange}</span>
             </span>
           </div>
+        ) : (
+          <p className="mb-2 text-[12px] text-muted">
+            {period === "week" ? "今週" : "今月"} {curRange}
+          </p>
         )}
         {rows.length >= 3 && <Radar rows={rows} max={max} showPrev={compare} />}
         <BarList rows={rows} max={max} showPrev={compare} />

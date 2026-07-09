@@ -1392,7 +1392,12 @@ export default function TrainingLog() {
             </>
           )}
           {chartTab === "balance" && (
-            <MobileBalance items={items} minutes={minutes} weekStart={weekStart} />
+            <MobileBalance
+              items={items}
+              minutes={minutes}
+              weekStart={weekStart}
+              categoryOrder={categories.map((c) => c.id)}
+            />
           )}
           {chartTab === "trend" && (
             <MobileTrend items={items} minutes={minutes} weekStart={weekStart} />

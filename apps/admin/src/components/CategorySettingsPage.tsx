@@ -60,6 +60,17 @@ export function CategorySettingsPage() {
     setCats((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
     setSavedFlash(false);
   }
+  function move(id: string, dir: -1 | 1) {
+    setCats((prev) => {
+      const i = prev.findIndex((c) => c.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+    setSavedFlash(false);
+  }
   function remove(id: string) {
     const c = cats.find((x) => x.id === id);
     if (
@@ -118,11 +129,29 @@ export function CategorySettingsPage() {
       </p>
 
       <div className="space-y-2">
-        {cats.map((c) => (
+        {cats.map((c, idx) => (
           <div
             key={c.id}
             className="flex items-center gap-3 rounded-xl border border-card-border bg-card-bg p-3"
           >
+            <div className="flex flex-col">
+              <button
+                onClick={() => move(c.id, -1)}
+                disabled={idx === 0}
+                className="px-1 text-[14px] leading-tight text-slate-600 disabled:opacity-30"
+                aria-label="上へ"
+              >
+                ▲
+              </button>
+              <button
+                onClick={() => move(c.id, 1)}
+                disabled={idx === cats.length - 1}
+                className="px-1 text-[14px] leading-tight text-slate-600 disabled:opacity-30"
+                aria-label="下へ"
+              >
+                ▼
+              </button>
+            </div>
             <div className="flex shrink-0 gap-1">
               {COLOR_CHOICES.map((col) => (
                 <button

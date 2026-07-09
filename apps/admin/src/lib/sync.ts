@@ -51,8 +51,11 @@ export type SyncItem = {
   categoryId: string | null;
   categoryName: string;
 };
+export type SyncCategory = { id: string; name: string; color: string };
 export type RemoteState = {
   items: SyncItem[];
+  // カテゴリ（sort_order 順）。バランスのレーダー軸の並びに使う。
+  categories: SyncCategory[];
   // 項目の実施マーク。key=`${itemId}:${date}` -> 1（実施）。行が無ければ未実施。
   minutes: Record<string, number>;
   // その日の合計トレーニング時間（分）。key=`${date}` -> 分。
@@ -93,12 +96,21 @@ export async function pullRemote(): Promise<RemoteState | null> {
 
   // カテゴリ（名前＋色）を先に取得し、項目の色・カテゴリ名を解決する。
   const { data: catRows, error: ec } = await to(
-    supabase.from("categories").select("id,name,color").eq("user_id", uid),
+    supabase
+      .from("categories")
+      .select("id,name,color,sort_order")
+      .eq("user_id", uid)
+      .order("sort_order", { ascending: true }),
   );
   if (ec) throw ec;
   const catById = new Map<string, { name: string; color: string }>();
   for (const c of catRows ?? [])
     catById.set(c.id, { name: c.name, color: c.color });
+  const categories: SyncCategory[] = (catRows ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+  }));
 
   const { data: itemRows, error: e1 } = await to(
     supabase
@@ -141,7 +153,13 @@ export async function pullRemote(): Promise<RemoteState | null> {
     supabase.from("profiles").select("week_start").eq("id", uid).single(),
   );
 
-  return { items, minutes, dayMinutes, weekStart: prof?.week_start ?? null };
+  return {
+    items,
+    categories,
+    minutes,
+    dayMinutes,
+    weekStart: prof?.week_start ?? null,
+  };
 }
 
 // ---- その日の合計トレーニング時間（分）----

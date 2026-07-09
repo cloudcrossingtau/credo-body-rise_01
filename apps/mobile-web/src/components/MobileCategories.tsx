@@ -58,6 +58,16 @@ export function MobileCategories({
   function update(id: string, patch: Partial<Category>) {
     setCats((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   }
+  function move(id: string, dir: -1 | 1) {
+    setCats((prev) => {
+      const i = prev.findIndex((c) => c.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
   function remove(id: string) {
     const c = cats.find((x) => x.id === id);
     if (
@@ -127,12 +137,30 @@ export function MobileCategories({
             トレーニング項目を分類するカテゴリ（名前＋色）です。項目の色はカテゴリの色になります。
           </p>
           <div className="space-y-2">
-            {cats.map((c) => (
+            {cats.map((c, idx) => (
               <div
                 key={c.id}
                 className="rounded-xl border border-card-border bg-card-bg p-3"
               >
                 <div className="flex items-center gap-2">
+                  <div className="flex flex-col">
+                    <button
+                      onClick={() => move(c.id, -1)}
+                      disabled={idx === 0}
+                      className="px-1 text-[14px] leading-tight text-slate-600 disabled:opacity-30 dark:text-slate-300"
+                      aria-label="上へ"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      onClick={() => move(c.id, 1)}
+                      disabled={idx === cats.length - 1}
+                      className="px-1 text-[14px] leading-tight text-slate-600 disabled:opacity-30 dark:text-slate-300"
+                      aria-label="下へ"
+                    >
+                      ▼
+                    </button>
+                  </div>
                   <input
                     value={c.name}
                     onChange={(e) => update(c.id, { name: e.target.value })}
