@@ -18,14 +18,31 @@ import {
   uuid,
 } from "@/lib/sync";
 import { withRetry, autoReloadOnce } from "@/lib/recover";
+import {
+  type Category,
+  pullCategories,
+  UNCATEGORIZED,
+  UNCATEGORIZED_COLOR,
+} from "@/lib/categories";
 import AuthScreen from "./AuthScreen";
 import SetPasswordScreen from "./SetPasswordScreen";
 import ProfileScreen from "./ProfileScreen";
 import { AnnouncementBellButton } from "./AnnouncementBellButton";
+import { MobileBalance } from "./MobileBalance";
+import { MobileTrend } from "./MobileTrend";
+import { MobileCategories } from "./MobileCategories";
 
 // ---- 型 ----
 type Unit = "time" | "count"; // time=実施時間(分) / count=種目数(回)
-type Item = { id: string; name: string; color: string; unit: Unit };
+// color/categoryName はカテゴリ由来（読み込み時に解決）。categoryId=未分類なら null。
+type Item = {
+  id: string;
+  name: string;
+  color: string;
+  unit: Unit;
+  categoryId: string | null;
+  categoryName: string;
+};
 // key = `${itemId}:${YYYY-MM-DD}` -> 値（time: 分 / count: 回）
 type Minutes = Record<string, number>;
 
@@ -124,17 +141,21 @@ export default function TrainingLog() {
   const [editing, setEditing] = useState<Date | null>(null);
   const [editVal, setEditVal] = useState("");
 
-  // 設定: 項目ごとのインライン色ピッカー
-  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+  // カテゴリ（名前＋色）。項目はこのカテゴリを選んで分類する。
+  const [categories, setCategories] = useState<Category[]>([]);
+  // グラフタブの表示切替（時間／バランス／推移）
+  const [chartTab, setChartTab] = useState<"time" | "balance" | "trend">("time");
+  // 設定: 項目ごとのインラインカテゴリピッカー
+  const [catPickerFor, setCatPickerFor] = useState<string | null>(null);
   // 設定: 新規追加フォーム
   const [newName, setNewName] = useState("");
-  const [newColor, setNewColor] = useState(COLOR_CHOICES[0]);
+  const [newCategoryId, setNewCategoryId] = useState<string | null>(null);
   const [newUnit, setNewUnit] = useState<Unit>("time");
   // 設定: 参照/編集モード（編集前の状態をスナップショットして キャンセルで復元）
   const [settingsEditing, setSettingsEditing] = useState(false);
   // 設定タブ内のサブ画面（メニュー → 各設定へ1段深く入る）
   const [settingsPane, setSettingsPane] = useState<
-    "menu" | "week" | "items" | "invite" | "profile"
+    "menu" | "week" | "items" | "categories" | "invite" | "profile"
   >("menu");
   const [settingsSnapshot, setSettingsSnapshot] = useState<{
     items: Item[];
@@ -222,17 +243,25 @@ export default function TrainingLog() {
     setLoaded(false);
     setLoadError(null);
     try {
-      const remote = await withRetry(() => pullRemote(), {
-        timeoutMs: 5000,
-        maxAttempts: 3,
-        label: "pullRemote",
-      });
+      const [remote, cats] = await Promise.all([
+        withRetry(() => pullRemote(), {
+          timeoutMs: 5000,
+          maxAttempts: 3,
+          label: "pullRemote",
+        }),
+        withRetry(() => pullCategories(), {
+          timeoutMs: 5000,
+          maxAttempts: 3,
+          label: "pullCategories",
+        }),
+      ]);
       if (remote) {
         setItems(remote.items);
         setMinutes(remote.minutes);
         setDayMinutes(remote.dayMinutes);
         if (remote.weekStart != null) setWeekStart(remote.weekStart);
       }
+      setCategories(cats);
       setLoaded(true);
     } catch (e) {
       console.warn("[load] failed:", e);
@@ -494,8 +523,25 @@ export default function TrainingLog() {
   }
 
   // ---- 設定: 項目の編集 ----
+  // categoryId から表示用の色・名前を解決する。
+  function resolveCat(categoryId: string | null): {
+    color: string;
+    categoryName: string;
+  } {
+    const c = categoryId ? categories.find((x) => x.id === categoryId) : undefined;
+    return {
+      color: c?.color ?? UNCATEGORIZED_COLOR,
+      categoryName: c?.name ?? UNCATEGORIZED,
+    };
+  }
   function updateItem(id: string, patch: Partial<Item>) {
     setItems((arr) => arr.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  }
+  // 項目のカテゴリを変更（色・カテゴリ名も追従）。
+  function setItemCategory(id: string, categoryId: string) {
+    const { color, categoryName } = resolveCat(categoryId);
+    updateItem(id, { categoryId, color, categoryName });
+    setCatPickerFor(null);
   }
   function moveItem(id: string, dir: -1 | 1) {
     setItems((arr) => {
@@ -522,16 +568,21 @@ export default function TrainingLog() {
   function addItem() {
     const name = newName.trim();
     if (!name) return;
+    const catId = newCategoryId ?? categories[0]?.id ?? null;
+    const { color, categoryName } = resolveCat(catId);
     const id = uuid();
-    setItems((arr) => [...arr, { id, name, color: newColor, unit: newUnit }]);
+    setItems((arr) => [
+      ...arr,
+      { id, name, color, unit: newUnit, categoryId: catId, categoryName },
+    ]);
     setNewName("");
-    setNewColor(COLOR_CHOICES[0]);
+    setNewCategoryId(null);
     setNewUnit("time");
   }
   function enterSettingsEdit() {
     setSettingsSnapshot({ items, minutes, weekStart });
     setSettingsEditing(true);
-    setColorPickerFor(null);
+    setCatPickerFor(null);
     setSettingsError(null);
   }
   // 「保存」: 編集中の項目・週開始曜日を Supabase に反映。失敗したら編集を維持。
@@ -545,7 +596,7 @@ export default function TrainingLog() {
       }
       setSettingsSnapshot(null);
       setSettingsEditing(false);
-      setColorPickerFor(null);
+      setCatPickerFor(null);
       setSettingsPane("menu"); // 保存できたら設定メニューに戻る
     } catch (e) {
       console.warn("[settings] save failed:", e);
@@ -563,7 +614,7 @@ export default function TrainingLog() {
     }
     setSettingsSnapshot(null);
     setSettingsEditing(false);
-    setColorPickerFor(null);
+    setCatPickerFor(null);
     setSettingsError(null);
     setSettingsPane("menu"); // キャンセル/戻るで設定メニューに戻る
   }
@@ -707,6 +758,17 @@ export default function TrainingLog() {
         </>
       );
     }
+    if (settingsPane === "categories") {
+      return (
+        <>
+          <MobileCategories
+            onBack={() => setSettingsPane("menu")}
+            onSaved={loadData}
+          />
+          {tabBar}
+        </>
+      );
+    }
     const paneTitle =
       settingsPane === "week"
         ? "週の開始曜日"
@@ -842,15 +904,6 @@ export default function TrainingLog() {
                         ▼
                       </button>
                     </div>
-                    {/* 色 */}
-                    <button
-                      onClick={() =>
-                        setColorPickerFor((p) => (p === it.id ? null : it.id))
-                      }
-                      className="h-8 w-8 shrink-0 rounded-full ring-1 ring-slate-300 dark:ring-slate-600"
-                      style={{ backgroundColor: it.color }}
-                      aria-label="色を変更"
-                    />
                     {/* 名前 */}
                     <input
                       value={it.name}
@@ -868,25 +921,44 @@ export default function TrainingLog() {
                     </button>
                   </div>
 
-                  {/* インライン色ピッカー */}
-                  {colorPickerFor === it.id && (
+                  {/* カテゴリ選択（色付きチップ・タップで開閉） */}
+                  <button
+                    onClick={() =>
+                      setCatPickerFor((p) => (p === it.id ? null : it.id))
+                    }
+                    className="mt-2 flex items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 text-[14px] font-medium text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                  >
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: it.color }}
+                    />
+                    {it.categoryName}
+                    <span className="text-slate-400">▾</span>
+                  </button>
+                  {catPickerFor === it.id && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {COLOR_CHOICES.map((c) => (
+                      {categories.map((c) => (
                         <button
-                          key={c}
-                          onClick={() => {
-                            updateItem(it.id, { color: c });
-                            setColorPickerFor(null);
-                          }}
-                          className={`h-8 w-8 rounded-full ${
-                            it.color === c
-                              ? "ring-2 ring-slate-500 ring-offset-2 dark:ring-offset-slate-900"
-                              : ""
+                          key={c.id}
+                          onClick={() => setItemCategory(it.id, c.id)}
+                          className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[14px] font-medium ${
+                            it.categoryId === c.id
+                              ? "border-accent bg-accent-light text-accent"
+                              : "border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200"
                           }`}
-                          style={{ backgroundColor: c }}
-                          aria-label={c}
-                        />
+                        >
+                          <span
+                            className="h-3 w-3 rounded-full"
+                            style={{ backgroundColor: c.color }}
+                          />
+                          {c.name}
+                        </button>
                       ))}
+                      {categories.length === 0 && (
+                        <span className="text-[13px] text-muted">
+                          カテゴリがありません（設定→カテゴリで作成）
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -910,23 +982,36 @@ export default function TrainingLog() {
                 className="mt-2 w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[16px] text-slate-900 placeholder:text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               />
               <p className="mt-3 text-[15px] font-medium text-slate-800 dark:text-slate-200">
-                色
+                カテゴリ
               </p>
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                {COLOR_CHOICES.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setNewColor(c)}
-                    className={`h-8 w-8 rounded-full ${
-                      newColor === c
-                        ? "ring-2 ring-slate-500 ring-offset-2 dark:ring-offset-slate-900"
-                        : ""
-                    }`}
-                    style={{ backgroundColor: c }}
-                    aria-label={c}
-                  />
-                ))}
-              </div>
+              {categories.length === 0 ? (
+                <p className="mt-1.5 rounded-lg bg-slate-50 px-3 py-2 text-[14px] text-muted dark:bg-slate-800">
+                  カテゴリがありません。設定→カテゴリで作成してください。
+                </p>
+              ) : (
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  {categories.map((c) => {
+                    const sel = (newCategoryId ?? categories[0]?.id) === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => setNewCategoryId(c.id)}
+                        className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[14px] font-medium ${
+                          sel
+                            ? "border-accent bg-accent-light text-accent"
+                            : "border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                        }`}
+                      >
+                        <span
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: c.color }}
+                        />
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <button
                 onClick={addItem}
                 className="mt-4 w-full rounded-xl bg-accent px-4 py-2.5 text-[16px] font-semibold text-white active:opacity-90"
@@ -1016,6 +1101,13 @@ export default function TrainingLog() {
                 トレーニング
               </h3>
               <div className="space-y-2">
+                <button
+                  onClick={() => setSettingsPane("categories")}
+                  className={cardCls}
+                >
+                  <span>カテゴリ</span>
+                  {chevron}
+                </button>
                 <button
                   onClick={() => {
                     setSettingsPane("items");
@@ -1246,34 +1338,65 @@ export default function TrainingLog() {
             </div>
           </header>
 
-          <section className="mt-5">
-            <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-              トレーニング時間（分）・日別
-            </h2>
-            {renderBarChart(
-              dayList.map((d) => ({
-                value: sumDay(d),
-                x: dailyX(d),
-                boundary: d.getDay() === weekStart,
-              })),
-              TIME_COLOR,
-              fmtMin,
-              DAY_W,
-              timeDailyRef,
-            )}
-          </section>
-          <section className="mt-6">
-            <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
-              トレーニング時間（分）・週別
-            </h2>
-            {renderBarChart(
-              weekList.map((ws) => ({ value: sumWeek(ws), x: weeklyX(ws) })),
-              TIME_COLOR,
-              fmtMin,
-              WEEK_W,
-              timeWeeklyRef,
-            )}
-          </section>
+          {/* サブタブ: 時間 / バランス / 推移 */}
+          <div className="mb-4 inline-flex rounded-full border border-slate-300 p-0.5">
+            {(
+              [
+                ["time", "時間"],
+                ["balance", "バランス"],
+                ["trend", "推移"],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                onClick={() => setChartTab(k)}
+                className={`rounded-full px-3 py-1 text-[14px] font-medium ${
+                  chartTab === k ? "bg-accent text-white" : "text-slate-700"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {chartTab === "time" && (
+            <>
+              <section className="mt-1">
+                <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
+                  トレーニング時間（分）・日別
+                </h2>
+                {renderBarChart(
+                  dayList.map((d) => ({
+                    value: sumDay(d),
+                    x: dailyX(d),
+                    boundary: d.getDay() === weekStart,
+                  })),
+                  TIME_COLOR,
+                  fmtMin,
+                  DAY_W,
+                  timeDailyRef,
+                )}
+              </section>
+              <section className="mt-6">
+                <h2 className="text-[16px] font-semibold text-slate-900 dark:text-slate-100">
+                  トレーニング時間（分）・週別
+                </h2>
+                {renderBarChart(
+                  weekList.map((ws) => ({ value: sumWeek(ws), x: weeklyX(ws) })),
+                  TIME_COLOR,
+                  fmtMin,
+                  WEEK_W,
+                  timeWeeklyRef,
+                )}
+              </section>
+            </>
+          )}
+          {chartTab === "balance" && (
+            <MobileBalance items={items} minutes={minutes} weekStart={weekStart} />
+          )}
+          {chartTab === "trend" && (
+            <MobileTrend items={items} minutes={minutes} weekStart={weekStart} />
+          )}
         </div>
         {tabBar}
       </>

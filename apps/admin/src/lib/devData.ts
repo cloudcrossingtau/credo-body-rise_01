@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import type { Item, Minutes } from "./training";
+import { UNCATEGORIZED, UNCATEGORIZED_COLOR } from "./categories";
 
 // 開発者/管理者専用: 全ユーザーのトレーニングデータをユーザー単位でまとめて取得する。
 // RLS により developer は training_items / training_records を全件、
@@ -27,26 +28,41 @@ export async function pullAllUserGrids(): Promise<UserGrid[]> {
     { data: items, error: ei },
     { data: recs, error: er },
     { data: dms, error: ed },
+    { data: cats, error: ecc },
   ] = await Promise.all([
     supabase
       .from("profiles")
       .select("id,email,nickname,avatar_path,role,week_start"),
     supabase
       .from("training_items")
-      .select("id,user_id,name,color,unit,sort_order")
+      .select("id,user_id,name,color,unit,sort_order,category_id")
       .order("sort_order", { ascending: true }),
     supabase.from("training_records").select("user_id,item_id,date,value"),
     supabase.from("daily_minutes").select("user_id,date,minutes"),
+    supabase.from("categories").select("id,name,color"),
   ]);
   if (ep) throw ep;
   if (ei) throw ei;
   if (er) throw er;
   if (ed) throw ed;
+  if (ecc) throw ecc;
+
+  const catById = new Map<string, { name: string; color: string }>();
+  for (const c of cats ?? [])
+    catById.set(c.id, { name: c.name, color: c.color });
 
   const itemsByUser = new Map<string, Item[]>();
   for (const it of items ?? []) {
     const list = itemsByUser.get(it.user_id) ?? [];
-    list.push({ id: it.id, name: it.name, color: it.color, unit: it.unit });
+    const cat = it.category_id ? catById.get(it.category_id) : undefined;
+    list.push({
+      id: it.id,
+      name: it.name,
+      color: cat?.color ?? it.color ?? UNCATEGORIZED_COLOR,
+      unit: it.unit,
+      categoryId: it.category_id ?? null,
+      categoryName: cat?.name ?? UNCATEGORIZED,
+    });
     itemsByUser.set(it.user_id, list);
   }
 

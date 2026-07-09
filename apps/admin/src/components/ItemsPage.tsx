@@ -1,12 +1,24 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { pullRemote, saveItems, uuid } from "@/lib/sync";
-import { type Item, type Unit, COLOR_CHOICES } from "@/lib/training";
+import { type Item, type Unit } from "@/lib/training";
+import {
+  type Category,
+  pullCategories,
+  UNCATEGORIZED,
+  UNCATEGORIZED_COLOR,
+} from "@/lib/categories";
 
-type Draft = { id: string | null; name: string; color: string; unit: Unit };
+type Draft = {
+  id: string | null;
+  name: string;
+  unit: Unit;
+  categoryId: string | null;
+};
 
 export function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -22,8 +34,12 @@ export function ItemsPage() {
     setLoaded(false);
     setLoadError(null);
     try {
-      const remote = await pullRemote();
+      const [remote, categories] = await Promise.all([
+        pullRemote(),
+        pullCategories(),
+      ]);
       if (remote) setItems(remote.items);
+      setCats(categories);
       setLoaded(true);
     } catch (e) {
       console.warn("[load] failed:", e);
@@ -33,6 +49,18 @@ export function ItemsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // categoryId から表示用の色・名前を解決する。
+  function resolveCat(categoryId: string | null): {
+    color: string;
+    categoryName: string;
+  } {
+    const c = categoryId ? cats.find((x) => x.id === categoryId) : undefined;
+    return {
+      color: c?.color ?? UNCATEGORIZED_COLOR,
+      categoryName: c?.name ?? UNCATEGORIZED,
+    };
+  }
 
   // 一覧を正として即時保存。失敗時は false を返し、呼び出し側で巻き戻す。
   async function persist(next: Item[]): Promise<boolean> {
@@ -69,17 +97,32 @@ export function ItemsPage() {
       setError("項目名を入力してください。");
       return;
     }
+    const { color, categoryName } = resolveCat(draft.categoryId);
     let next: Item[];
     if (draft.id) {
       next = items.map((x) =>
         x.id === draft.id
-          ? { ...x, name, color: draft.color, unit: draft.unit }
+          ? {
+              ...x,
+              name,
+              unit: draft.unit,
+              categoryId: draft.categoryId,
+              color,
+              categoryName,
+            }
           : x,
       );
     } else {
       next = [
         ...items,
-        { id: uuid(), name, color: draft.color, unit: draft.unit },
+        {
+          id: uuid(),
+          name,
+          unit: draft.unit,
+          categoryId: draft.categoryId,
+          color,
+          categoryName,
+        },
       ];
     }
     const ok = await persist(next);
@@ -137,8 +180,8 @@ export function ItemsPage() {
               setDraft({
                 id: it.id,
                 name: it.name,
-                color: it.color,
                 unit: it.unit,
+                categoryId: it.categoryId,
               })
             }
             className="flex w-full items-center gap-3 rounded-xl border border-card-border bg-card-bg p-4 text-left transition-all hover:border-slate-300 hover:shadow-sm"
@@ -149,6 +192,9 @@ export function ItemsPage() {
             />
             <span className="flex-1 text-[15px] font-semibold text-foreground">
               {it.name}
+              <span className="ml-2 align-middle text-[12px] font-normal text-muted">
+                {it.categoryName}
+              </span>
             </span>
             {/* 並べ替え（カードのクリックとは独立） */}
             <span className="flex flex-col">
@@ -209,7 +255,12 @@ export function ItemsPage() {
 
       <button
         onClick={() =>
-          setDraft({ id: null, name: "", color: COLOR_CHOICES[0], unit: "time" })
+          setDraft({
+            id: null,
+            name: "",
+            unit: "time",
+            categoryId: cats[0]?.id ?? null,
+          })
         }
         className="mt-4 w-full rounded-xl border border-dashed border-slate-300 bg-card-bg px-4 py-3 text-[15px] font-semibold text-accent hover:bg-slate-50"
       >
@@ -241,21 +292,40 @@ export function ItemsPage() {
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-card-bg px-3 py-2.5 text-[16px] text-slate-900 placeholder:text-slate-400"
             />
 
-
-            <p className="mt-3 text-[14px] font-medium text-slate-800">色</p>
-            <div className="mt-1.5 flex flex-wrap gap-2">
-              {COLOR_CHOICES.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setDraft({ ...draft, color: c })}
-                  className={`h-8 w-8 rounded-full ${
-                    draft.color === c ? "ring-2 ring-slate-500 ring-offset-2" : ""
-                  }`}
-                  style={{ backgroundColor: c }}
-                  aria-label={c}
-                />
-              ))}
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-[14px] font-medium text-slate-800">カテゴリ</p>
+              <a
+                href="/settings/categories"
+                className="text-[13px] font-medium text-accent"
+              >
+                カテゴリを編集 →
+              </a>
             </div>
+            {cats.length === 0 ? (
+              <p className="mt-1.5 rounded-lg bg-slate-50 px-3 py-2 text-[14px] text-muted">
+                カテゴリがありません。先に「カテゴリを編集」から作成してください。
+              </p>
+            ) : (
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                {cats.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setDraft({ ...draft, categoryId: c.id })}
+                    className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[15px] font-medium ${
+                      draft.categoryId === c.id
+                        ? "border-accent bg-accent-light text-accent"
+                        : "border-slate-300 text-slate-700"
+                    }`}
+                  >
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: c.color }}
+                    />
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {error && (
               <p className="mt-4 text-[14px] font-medium text-red-600">{error}</p>

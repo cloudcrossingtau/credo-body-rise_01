@@ -3,7 +3,15 @@
 // 同等ロジックを admin（デスクトップ）向けに切り出したもの。
 
 export type Unit = "time" | "count"; // time=実施時間(分) / count=種目数(回)
-export type Item = { id: string; name: string; color: string; unit: Unit };
+// color/categoryName はカテゴリ由来（読み込み時に解決）。categoryId=未分類なら null。
+export type Item = {
+  id: string;
+  name: string;
+  color: string;
+  unit: Unit;
+  categoryId: string | null;
+  categoryName: string;
+};
 // key = `${itemId}:${YYYY-MM-DD}` -> 値（time: 分 / count: 回）
 export type Minutes = Record<string, number>;
 

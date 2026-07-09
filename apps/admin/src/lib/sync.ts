@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { withTimeout, withRetry, autoReloadOnce } from "./recover";
+import { UNCATEGORIZED, UNCATEGORIZED_COLOR } from "./categories";
 
 // Supabase が唯一の正（source of truth）。普通のWebアプリと同じく、
 // 各操作はその場で Supabase に書き込み、成功/失敗を呼び出し側で扱う。
@@ -41,7 +42,15 @@ async function preflightOrReload(): Promise<void> {
 }
 
 export type Unit = "time" | "count";
-export type SyncItem = { id: string; name: string; color: string; unit: Unit };
+// color/categoryName はカテゴリ由来（読み込み時に解決）。categoryId=未分類なら null。
+export type SyncItem = {
+  id: string;
+  name: string;
+  color: string;
+  unit: Unit;
+  categoryId: string | null;
+  categoryName: string;
+};
 export type RemoteState = {
   items: SyncItem[];
   // 項目の実施マーク。key=`${itemId}:${date}` -> 1（実施）。行が無ければ未実施。
@@ -82,20 +91,34 @@ export async function pullRemote(): Promise<RemoteState | null> {
   const uid = s.session?.user?.id;
   if (!uid) return null;
 
+  // カテゴリ（名前＋色）を先に取得し、項目の色・カテゴリ名を解決する。
+  const { data: catRows, error: ec } = await to(
+    supabase.from("categories").select("id,name,color").eq("user_id", uid),
+  );
+  if (ec) throw ec;
+  const catById = new Map<string, { name: string; color: string }>();
+  for (const c of catRows ?? [])
+    catById.set(c.id, { name: c.name, color: c.color });
+
   const { data: itemRows, error: e1 } = await to(
     supabase
       .from("training_items")
-      .select("id,name,color,unit,sort_order")
+      .select("id,name,color,unit,sort_order,category_id")
       .eq("user_id", uid) // 本人のデータのみ（開発者でも個人タブは本人分だけに限定）
       .order("sort_order", { ascending: true }),
   );
   if (e1) throw e1;
-  const items: SyncItem[] = (itemRows ?? []).map((r) => ({
-    id: r.id,
-    name: r.name,
-    color: r.color,
-    unit: r.unit,
-  }));
+  const items: SyncItem[] = (itemRows ?? []).map((r) => {
+    const cat = r.category_id ? catById.get(r.category_id) : undefined;
+    return {
+      id: r.id,
+      name: r.name,
+      color: cat?.color ?? r.color ?? UNCATEGORIZED_COLOR,
+      unit: r.unit,
+      categoryId: r.category_id ?? null,
+      categoryName: cat?.name ?? UNCATEGORIZED,
+    };
+  });
 
   const { data: recRows, error: e2 } = await to(
     supabase
@@ -228,9 +251,10 @@ export async function saveItems(items: SyncItem[]): Promise<void> {
       id: it.id,
       user_id: uid,
       name: it.name,
-      color: it.color,
+      color: it.color, // カテゴリ色のキャッシュ（表示・後方互換用）
       unit: it.unit,
       sort_order: i,
+      category_id: it.categoryId,
     }));
     const { error } = await to(supabase!.from("training_items").upsert(rows));
     if (error) throw error;

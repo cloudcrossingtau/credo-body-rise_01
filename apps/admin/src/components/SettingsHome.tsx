@@ -32,6 +32,12 @@ export function SettingsHome() {
       title: "トレーニング",
       cards: [
         {
+          href: "/settings/categories",
+          title: "カテゴリ",
+          description: "トレーニング項目のカテゴリ（名前・色）を管理",
+          icon: ICON.items,
+        },
+        {
           href: "/settings/items",
           title: "トレーニング項目",
           description: "項目の追加・編集・並べ替え・削除",
