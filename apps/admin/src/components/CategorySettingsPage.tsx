@@ -123,9 +123,15 @@ export function CategorySettingsPage() {
 
   return (
     <div className="mx-auto max-w-2xl p-6">
-      <h2 className="mb-1 text-[20px] font-semibold text-foreground">
-        カテゴリ
-      </h2>
+      <div className="mb-1 flex items-center gap-2">
+        <a
+          href="/settings"
+          className="rounded-lg px-2 py-1 text-[15px] text-accent hover:bg-slate-100"
+        >
+          ‹ 設定
+        </a>
+        <h2 className="text-[20px] font-semibold text-foreground">カテゴリ</h2>
+      </div>
       <p className="mb-4 text-[13px] text-muted">
         トレーニング項目を分類するカテゴリ（名前＋色）を設定します。項目の色はカテゴリの色になります。
       </p>
