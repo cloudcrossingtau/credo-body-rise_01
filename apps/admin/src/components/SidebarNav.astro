@@ -26,18 +26,8 @@ const navItems: NavItem[] = [
     href: "/charts",
     label: "グラフ",
     icon: "M3 3v18h18M8 17v-4M13 17v-8M18 17v-6",
-  },
-  {
-    href: "/analysis",
-    label: "バランス",
-    icon: "M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4",
-    matchPaths: ["/analysis"],
-  },
-  {
-    href: "/trend",
-    label: "推移",
-    icon: "M3 3v18h18M7 15l3-4 3 3 5-7",
-    matchPaths: ["/trend"],
+    // 時間/バランス/推移 は「グラフ」内のサブタブに統合（モバイルと統一）。
+    matchPaths: ["/charts", "/analysis", "/trend"],
   },
   {
     href: "/announcements",

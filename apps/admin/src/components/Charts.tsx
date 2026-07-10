@@ -11,7 +11,7 @@ import { withRetry, autoReloadOnce } from "@/lib/recover";
 // グラフ。ロールで見える範囲が変わる:
 //   - 一般ユーザー: 自分のグラフ。
 //   - 管理者/開発者: 全ユーザーのグラフをユーザーごとに表示。
-export function Charts() {
+export function Charts({ embedded = false }: { embedded?: boolean } = {}) {
   const [role, setRole] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -90,15 +90,21 @@ export function Charts() {
   // ===== 管理者/開発者: 全ユーザーのグラフ =====
   if (isManager) {
     return (
-      <div className="mx-auto max-w-5xl p-6">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-[20px] font-semibold text-foreground">グラフ</h2>
-          <RefreshButton onClick={loadData} />
-        </div>
-        <p className="mb-5 text-[13px] text-muted">
-          全ユーザーのグラフを表示しています（{roleLabel(role ?? "")}）。登録ユーザー{" "}
-          {userGrids.length} 名。
-        </p>
+      <div className={embedded ? "" : "mx-auto max-w-5xl p-6"}>
+        {!embedded && (
+          <>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-[20px] font-semibold text-foreground">
+                グラフ
+              </h2>
+              <RefreshButton onClick={loadData} />
+            </div>
+            <p className="mb-5 text-[13px] text-muted">
+              全ユーザーのグラフを表示しています（{roleLabel(role ?? "")}）。登録ユーザー{" "}
+              {userGrids.length} 名。
+            </p>
+          </>
+        )}
 
         <div className="space-y-10">
           {userGrids.map((u) => {
@@ -140,11 +146,13 @@ export function Charts() {
 
   // ===== 一般ユーザー: 自分のグラフ =====
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[20px] font-semibold text-foreground">グラフ</h2>
-        <RefreshButton onClick={loadData} />
-      </div>
+    <div className={embedded ? "" : "mx-auto max-w-5xl p-6"}>
+      {!embedded && (
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-[20px] font-semibold text-foreground">グラフ</h2>
+          <RefreshButton onClick={loadData} />
+        </div>
+      )}
       <UserCharts dayMinutes={dayMinutes} weekStart={weekStart} />
     </div>
   );

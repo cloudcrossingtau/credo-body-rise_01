@@ -237,7 +237,9 @@ function UserTrend({
   );
 }
 
-export function ItemTrend() {
+export function ItemTrend({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const [role, setRole] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -305,29 +307,27 @@ export function ItemTrend() {
     loadData();
   }, []);
 
+  const seg = (active: boolean) =>
+    `rounded-md px-3 py-1 text-[15px] font-medium transition-colors ${
+      active ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+    }`;
   const controls = (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="inline-flex rounded-full border border-slate-300 p-0.5">
+    <div className="flex flex-wrap items-center gap-4">
+      {/* 期間 */}
+      <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
         {(["week", "month"] as Gran[]).map((g) => (
-          <button
-            key={g}
-            onClick={() => setGran(g)}
-            className={`rounded-full px-3 py-1 text-[15px] font-medium ${
-              gran === g ? "bg-accent text-white" : "text-slate-700"
-            }`}
-          >
+          <button key={g} onClick={() => setGran(g)} className={seg(gran === g)}>
             {g === "month" ? `月（直近${MONTHS}ヶ月）` : `週（直近${WEEKS}週）`}
           </button>
         ))}
       </div>
-      <div className="inline-flex rounded-full border border-slate-300 p-0.5">
+      {/* 指標 */}
+      <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
         {(["days", "total"] as CatMetric[]).map((cm) => (
           <button
             key={cm}
             onClick={() => setCatMetric(cm)}
-            className={`rounded-full px-3 py-1 text-[15px] font-medium ${
-              catMetric === cm ? "bg-accent text-white" : "text-slate-700"
-            }`}
+            className={seg(catMetric === cm)}
           >
             {cm === "days" ? "実施日数" : "のべ回数"}
           </button>
@@ -357,14 +357,20 @@ export function ItemTrend() {
   // ===== 管理者/開発者: 全ユーザー =====
   if (isManager) {
     return (
-      <div className="mx-auto max-w-5xl p-6">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-[20px] font-semibold text-foreground">推移</h2>
-          <RefreshButton onClick={loadData} />
-        </div>
-        <p className="mb-4 text-[13px] text-muted">
-          {desc}登録ユーザー {userGrids.length} 名。
-        </p>
+      <div className={embedded ? "" : "mx-auto max-w-5xl p-6"}>
+        {!embedded && (
+          <>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-[20px] font-semibold text-foreground">
+                推移
+              </h2>
+              <RefreshButton onClick={loadData} />
+            </div>
+            <p className="mb-4 text-[13px] text-muted">
+              {desc}登録ユーザー {userGrids.length} 名。
+            </p>
+          </>
+        )}
         <div className="mb-6">{controls}</div>
 
         <div className="space-y-10">
@@ -411,12 +417,16 @@ export function ItemTrend() {
 
   // ===== 一般ユーザー: 自分 =====
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-[20px] font-semibold text-foreground">推移</h2>
-        <RefreshButton onClick={loadData} />
-      </div>
-      <p className="mb-4 text-[13px] text-muted">{desc}</p>
+    <div className={embedded ? "" : "mx-auto max-w-5xl p-6"}>
+      {!embedded && (
+        <>
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-[20px] font-semibold text-foreground">推移</h2>
+            <RefreshButton onClick={loadData} />
+          </div>
+          <p className="mb-4 text-[13px] text-muted">{desc}</p>
+        </>
+      )}
       <div className="mb-6">{controls}</div>
       <UserTrend
         items={items}

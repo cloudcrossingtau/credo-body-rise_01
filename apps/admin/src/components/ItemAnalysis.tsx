@@ -517,7 +517,9 @@ function ItemCharts({
   );
 }
 
-export function ItemAnalysis() {
+export function ItemAnalysis({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const [role, setRole] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -588,43 +590,57 @@ export function ItemAnalysis() {
     loadData();
   }, []);
 
+  // iOSセグメントのボタン（選択中だけ白カード）。
+  const seg = (active: boolean) =>
+    `rounded-md px-3 py-1 text-[15px] font-medium transition-colors ${
+      active ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"
+    }`;
   const controls = (
-    <div className="flex flex-wrap items-center gap-3">
-      <div className="inline-flex rounded-full border border-slate-300 p-0.5">
+    <div className="flex flex-wrap items-center gap-4">
+      {/* 期間 */}
+      <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
         {PERIODS.map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`rounded-full px-3 py-1 text-[15px] font-medium ${
-              period === p ? "bg-accent text-white" : "text-slate-700"
-            }`}
+            className={seg(period === p)}
           >
             {PERIOD_LABEL[p]}
           </button>
         ))}
       </div>
-      <div className="inline-flex rounded-full border border-slate-300 p-0.5">
+      {/* 指標 */}
+      <div className="inline-flex rounded-lg bg-slate-100 p-0.5">
         {(["days", "total"] as CatMetric[]).map((cm) => (
           <button
             key={cm}
             onClick={() => setCatMetric(cm)}
-            className={`rounded-full px-3 py-1 text-[15px] font-medium ${
-              catMetric === cm ? "bg-accent text-white" : "text-slate-700"
-            }`}
+            className={seg(catMetric === cm)}
           >
             {cm === "days" ? "実施日数" : "のべ回数"}
           </button>
         ))}
       </div>
+      {/* 比較スイッチ */}
       <button
         onClick={() => setCompare((v) => !v)}
-        className={`rounded-full border px-3 py-1 text-[15px] font-medium ${
-          compare
-            ? "border-accent bg-accent text-white"
-            : "border-slate-300 text-slate-700"
-        }`}
+        className="flex items-center gap-2"
+        aria-pressed={compare}
       >
-        {period === "week" ? "前週と比較" : "前月と比較"}
+        <span className="text-[15px] text-slate-700">
+          {period === "week" ? "前週と比較" : "前月と比較"}
+        </span>
+        <span
+          className={`relative inline-block h-5 w-9 rounded-full transition-colors ${
+            compare ? "bg-accent" : "bg-slate-300"
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+              compare ? "left-4.5" : "left-0.5"
+            }`}
+          />
+        </span>
       </button>
     </div>
   );
@@ -648,15 +664,21 @@ export function ItemAnalysis() {
   // ===== 管理者/開発者: 全ユーザー =====
   if (isManager) {
     return (
-      <div className="mx-auto max-w-5xl p-6">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-[20px] font-semibold text-foreground">バランス</h2>
-          <RefreshButton onClick={loadData} />
-        </div>
-        <p className="mb-4 text-[13px] text-muted">
-          その週/月のトレーニングの配分（バランス）を確認できます。登録ユーザー{" "}
-          {userGrids.length} 名。
-        </p>
+      <div className={embedded ? "" : "mx-auto max-w-5xl p-6"}>
+        {!embedded && (
+          <>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-[20px] font-semibold text-foreground">
+                バランス
+              </h2>
+              <RefreshButton onClick={loadData} />
+            </div>
+            <p className="mb-4 text-[13px] text-muted">
+              その週/月のトレーニングの配分（バランス）を確認できます。登録ユーザー{" "}
+              {userGrids.length} 名。
+            </p>
+          </>
+        )}
         <div className="mb-6">{controls}</div>
 
         <div className="space-y-10">
@@ -708,14 +730,20 @@ export function ItemAnalysis() {
 
   // ===== 一般ユーザー: 自分 =====
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-[20px] font-semibold text-foreground">バランス</h2>
-        <RefreshButton onClick={loadData} />
-      </div>
-      <p className="mb-4 text-[13px] text-muted">
-        その週/月のトレーニングの配分（バランス）を確認できます。
-      </p>
+    <div className={embedded ? "" : "mx-auto max-w-5xl p-6"}>
+      {!embedded && (
+        <>
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-[20px] font-semibold text-foreground">
+              バランス
+            </h2>
+            <RefreshButton onClick={loadData} />
+          </div>
+          <p className="mb-4 text-[13px] text-muted">
+            その週/月のトレーニングの配分（バランス）を確認できます。
+          </p>
+        </>
+      )}
       <div className="mb-6">{controls}</div>
       <ItemCharts
         items={items}

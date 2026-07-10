@@ -1,8 +1,8 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { ItemTrend } from "@/components/ItemTrend";
+import { GraphsHub } from "@/components/GraphsHub";
 ---
 
-<BaseLayout title="CredoBodyRise — 推移">
-  <ItemTrend client:only="react" />
+<BaseLayout title="CredoBodyRise — グラフ">
+  <GraphsHub client:only="react" initialTab="trend" />
 </BaseLayout>

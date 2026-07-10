@@ -1,8 +1,8 @@
 ---
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { ItemAnalysis } from "@/components/ItemAnalysis";
+import { GraphsHub } from "@/components/GraphsHub";
 ---
 
-<BaseLayout title="CredoBodyRise — バランス">
-  <ItemAnalysis client:only="react" />
+<BaseLayout title="CredoBodyRise — グラフ">
+  <GraphsHub client:only="react" initialTab="balance" />
 </BaseLayout>

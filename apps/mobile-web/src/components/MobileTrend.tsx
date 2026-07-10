@@ -173,9 +173,12 @@ export function MobileTrend({
   const [gran, setGran] = useState<Gran>("week");
   const [catMetric, setCatMetric] = useState<CatMetric>("days");
 
+  // iOSセグメントのボタン（選択中だけ白カード）。
   const pill = (active: boolean) =>
-    `rounded-full px-3 py-1 text-[14px] font-medium ${
-      active ? "bg-accent text-white" : "text-slate-700"
+    `rounded-md px-3 py-1 text-[14px] font-medium transition-colors ${
+      active
+        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-600 dark:text-slate-100"
+        : "text-slate-600 dark:text-slate-300"
     }`;
 
   if (items.length === 0) {
@@ -203,8 +206,9 @@ export function MobileTrend({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-full border border-slate-300 p-0.5">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        {/* 期間: iOSセグメント */}
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
           <button onClick={() => setGran("week")} className={pill(gran === "week")}>
             週（直近{WEEKS}週）
           </button>
@@ -212,13 +216,26 @@ export function MobileTrend({
             月（直近{MONTHS}ヶ月）
           </button>
         </div>
-        <div className="inline-flex rounded-full border border-slate-300 p-0.5">
-          <button onClick={() => setCatMetric("days")} className={pill(catMetric === "days")}>
-            実施日数
-          </button>
-          <button onClick={() => setCatMetric("total")} className={pill(catMetric === "total")}>
-            のべ回数
-          </button>
+        {/* 指標: 小さめ iOSセグメント */}
+        <div className="inline-flex rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800">
+          {(
+            [
+              ["days", "実施日数"],
+              ["total", "のべ回数"],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              onClick={() => setCatMetric(k)}
+              className={`rounded-md px-3 py-1 text-[13px] font-medium transition-colors ${
+                catMetric === k
+                  ? "bg-white text-slate-900 shadow-sm dark:bg-slate-600 dark:text-slate-100"
+                  : "text-slate-600 dark:text-slate-300"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 

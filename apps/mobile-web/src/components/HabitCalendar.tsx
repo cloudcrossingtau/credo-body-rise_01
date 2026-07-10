@@ -1338,8 +1338,8 @@ export default function TrainingLog() {
             </div>
           </header>
 
-          {/* サブタブ: 時間 / バランス / 推移 */}
-          <div className="mb-4 inline-flex rounded-full border border-slate-300 p-0.5">
+          {/* サブタブ: 時間 / バランス / 推移（iOS風セグメンテッドコントロール） */}
+          <div className="mb-4 flex rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
             {(
               [
                 ["time", "時間"],
@@ -1350,8 +1350,10 @@ export default function TrainingLog() {
               <button
                 key={k}
                 onClick={() => setChartTab(k)}
-                className={`rounded-full px-3 py-1 text-[14px] font-medium ${
-                  chartTab === k ? "bg-accent text-white" : "text-slate-700"
+                className={`flex-1 rounded-md px-3 py-1.5 text-[15px] font-medium transition-colors ${
+                  chartTab === k
+                    ? "bg-white text-slate-900 shadow-sm dark:bg-slate-600 dark:text-slate-100"
+                    : "text-slate-600 dark:text-slate-300"
                 }`}
               >
                 {label}
