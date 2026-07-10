@@ -88,10 +88,14 @@ async function requireUserId(): Promise<string> {
 
 // ---- 読み込み（起動時） ----
 // リモートの全データを取得。未ログイン/未設定なら null。
-export async function pullRemote(): Promise<RemoteState | null> {
+// targetUserId を渡すとそのユーザーの設定/記録を取得する（開発者が他ユーザーを見る用途）。
+// 省略時はログイン中の本人。他人分の参照は RLS（開発者のみ）で制御される。
+export async function pullRemote(
+  targetUserId?: string,
+): Promise<RemoteState | null> {
   if (!supabase) return null;
   const { data: s } = await to(supabase.auth.getSession());
-  const uid = s.session?.user?.id;
+  const uid = targetUserId ?? s.session?.user?.id;
   if (!uid) return null;
 
   // カテゴリ（名前＋色）を先に取得し、項目の色・カテゴリ名を解決する。
@@ -247,11 +251,14 @@ export async function deleteRecord(
 
 // ---- 項目（設定の「保存」でまとめて反映） ----
 // 現在の項目一覧を正として、upsert＋一覧に無い項目をdelete（子の記録はCASCADE削除）。
-export async function saveItems(items: SyncItem[]): Promise<void> {
-  const uid = await requireUserId();
+export async function saveItems(
+  items: SyncItem[],
+  targetUserId?: string,
+): Promise<void> {
+  const uid = targetUserId ?? (await requireUserId());
 
   const { data: remoteItems, error: e1 } = await to(
-    supabase!.from("training_items").select("id").eq("user_id", uid), // 本人の項目のみ対象
+    supabase!.from("training_items").select("id").eq("user_id", uid), // 対象ユーザーの項目のみ
   );
   if (e1) throw e1;
   const localIds = new Set(items.map((i) => i.id));
@@ -280,8 +287,11 @@ export async function saveItems(items: SyncItem[]): Promise<void> {
 }
 
 // ---- 週開始曜日 ----
-export async function saveWeekStart(weekStart: number): Promise<void> {
-  const uid = await requireUserId();
+export async function saveWeekStart(
+  weekStart: number,
+  targetUserId?: string,
+): Promise<void> {
+  const uid = targetUserId ?? (await requireUserId());
   const { error } = await to(
     supabase!.from("profiles").update({ week_start: weekStart }).eq("id", uid),
   );

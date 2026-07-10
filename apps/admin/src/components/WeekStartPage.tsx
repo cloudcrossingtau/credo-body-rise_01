@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { pullRemote, saveWeekStart } from "@/lib/sync";
 import { WD } from "@/lib/training";
+import { UserScopeSelect } from "@/components/UserScopeSelect";
 
 export function WeekStartPage() {
   const [weekStart, setWeekStart] = useState<number>(1);
@@ -9,21 +10,26 @@ export function WeekStartPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [target, setTarget] = useState<string | null>(null); // null=自分
 
-  useEffect(() => {
-    (async () => {
-      if (!supabase) {
-        setLoaded(true);
-        return;
-      }
-      try {
-        const remote = await pullRemote();
-        if (remote?.weekStart != null) setWeekStart(remote.weekStart);
-      } catch (e) {
-        console.warn("[load] failed:", e);
-      }
+  async function load(t: string | null) {
+    if (!supabase) {
       setLoaded(true);
-    })();
+      return;
+    }
+    setLoaded(false);
+    try {
+      const remote = await pullRemote(t ?? undefined);
+      if (remote?.weekStart != null) setWeekStart(remote.weekStart);
+      else setWeekStart(1);
+    } catch (e) {
+      console.warn("[load] failed:", e);
+    }
+    setLoaded(true);
+  }
+  useEffect(() => {
+    load(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function pick(idx: number) {
@@ -33,7 +39,7 @@ export function WeekStartPage() {
     setError(null);
     setMsg(null);
     try {
-      if (supabase) await saveWeekStart(idx);
+      if (supabase) await saveWeekStart(idx, target ?? undefined);
       setMsg("保存しました。");
     } catch (e) {
       console.warn("[weekStart] save failed:", e);
@@ -57,6 +63,16 @@ export function WeekStartPage() {
           週の開始曜日
         </h2>
       </div>
+
+      <UserScopeSelect
+        target={target}
+        onChange={(id) => {
+          setTarget(id);
+          setMsg(null);
+          setError(null);
+          load(id);
+        }}
+      />
 
       {!loaded ? (
         <p className="text-[15px] text-muted">読み込み中…</p>

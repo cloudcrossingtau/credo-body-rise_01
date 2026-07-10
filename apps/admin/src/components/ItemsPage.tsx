@@ -8,6 +8,7 @@ import {
   UNCATEGORIZED,
   UNCATEGORIZED_COLOR,
 } from "@/lib/categories";
+import { UserScopeSelect } from "@/components/UserScopeSelect";
 
 type Draft = {
   id: string | null;
@@ -25,8 +26,9 @@ export function ItemsPage() {
   const [error, setError] = useState<string | null>(null);
   // 編集モーダル（id=null は新規追加）
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [target, setTarget] = useState<string | null>(null); // null=自分
 
-  async function loadData() {
+  async function loadData(t: string | null = target) {
     if (!supabase) {
       setLoaded(true);
       return;
@@ -35,8 +37,8 @@ export function ItemsPage() {
     setLoadError(null);
     try {
       const [remote, categories] = await Promise.all([
-        pullRemote(),
-        pullCategories(),
+        pullRemote(t ?? undefined),
+        pullCategories(t ?? undefined),
       ]);
       if (remote) setItems(remote.items);
       setCats(categories);
@@ -69,7 +71,7 @@ export function ItemsPage() {
     setBusy(true);
     setError(null);
     try {
-      if (supabase) await saveItems(next);
+      if (supabase) await saveItems(next, target ?? undefined);
       return true;
     } catch (e) {
       console.warn("[items] save failed:", e);
@@ -166,6 +168,15 @@ export function ItemsPage() {
           トレーニング項目
         </h2>
       </div>
+
+      <UserScopeSelect
+        target={target}
+        onChange={(id) => {
+          setTarget(id);
+          setDraft(null);
+          loadData(id);
+        }}
+      />
 
       {error && (
         <p className="mb-3 text-[14px] font-medium text-red-600">{error}</p>

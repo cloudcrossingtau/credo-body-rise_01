@@ -8,6 +8,7 @@ import {
   categoryUuid,
 } from "@/lib/categories";
 import { COLOR_CHOICES } from "@/lib/training";
+import { UserScopeSelect } from "@/components/UserScopeSelect";
 
 // カテゴリ管理（本採用）。名前＋色を設定する。項目はこのカテゴリを選んで分類する。
 // カテゴリを削除すると、そのカテゴリの項目は「未分類」になる（記録は消えない）。
@@ -19,8 +20,9 @@ export function CategorySettingsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [target, setTarget] = useState<string | null>(null); // null=自分
 
-  async function loadData() {
+  async function loadData(t: string | null = target) {
     setLoaded(false);
     setLoadError(null);
     try {
@@ -29,7 +31,7 @@ export function CategorySettingsPage() {
         return;
       }
       setCats(
-        await withRetry(() => pullCategories(), {
+        await withRetry(() => pullCategories(t ?? undefined), {
           timeoutMs: 5000,
           maxAttempts: 3,
           label: "pullCategories",
@@ -92,7 +94,7 @@ export function CategorySettingsPage() {
     setError(null);
     try {
       const clean = cats.map((c) => ({ ...c, name: c.name.trim() }));
-      if (supabase) await saveCategories(clean);
+      if (supabase) await saveCategories(clean, target ?? undefined);
       setCats(clean);
       setSavedFlash(true);
     } catch (e) {
@@ -124,9 +126,17 @@ export function CategorySettingsPage() {
       <h2 className="mb-1 text-[20px] font-semibold text-foreground">
         カテゴリ
       </h2>
-      <p className="mb-6 text-[13px] text-muted">
+      <p className="mb-4 text-[13px] text-muted">
         トレーニング項目を分類するカテゴリ（名前＋色）を設定します。項目の色はカテゴリの色になります。
       </p>
+
+      <UserScopeSelect
+        target={target}
+        onChange={(id) => {
+          setTarget(id);
+          loadData(id);
+        }}
+      />
 
       <div className="space-y-2">
         {cats.map((c, idx) => (

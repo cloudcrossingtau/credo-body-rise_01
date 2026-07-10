@@ -24,11 +24,13 @@ export function categoryUuid(): string {
   });
 }
 
-// 本人のカテゴリ一覧。
-export async function pullCategories(): Promise<Category[]> {
+// カテゴリ一覧。targetUserId を渡すとそのユーザーの分（開発者が他ユーザーを見る用途）。
+export async function pullCategories(
+  targetUserId?: string,
+): Promise<Category[]> {
   if (!supabase) return [];
   const { data: s } = await to(supabase.auth.getSession());
-  const uid = s.session?.user?.id;
+  const uid = targetUserId ?? s.session?.user?.id;
   if (!uid) return [];
   const { data, error } = await to(
     supabase
@@ -43,10 +45,13 @@ export async function pullCategories(): Promise<Category[]> {
 
 // 現在の一覧を正として upsert＋一覧に無いものを削除（saveItems と同方針）。
 // カテゴリ削除時、そのカテゴリを参照する項目は category_id が NULL（未分類）になる。
-export async function saveCategories(cats: Category[]): Promise<void> {
+export async function saveCategories(
+  cats: Category[],
+  targetUserId?: string,
+): Promise<void> {
   if (!supabase) throw new Error("Supabase 未設定");
   const { data: s } = await to(supabase.auth.getSession());
-  const uid = s.session?.user?.id;
+  const uid = targetUserId ?? s.session?.user?.id;
   if (!uid) throw new Error("未ログイン");
 
   const { data: remote, error: e1 } = await to(
